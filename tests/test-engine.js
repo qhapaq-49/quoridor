@@ -153,6 +153,15 @@ function testAiConvertsWallLeadWithPawnMove() {
   ];
   for (const action of actions) state = Engine.applyAction(state, action);
 
+  const shallow = AI.analyze(state, {
+    timeLimit: 100000,
+    maxDepth: 2,
+    wallLimit: 6,
+    randomness: 0,
+    rootPlayer: 0
+  });
+  assert.strictEqual(shallow.bestMove.type, "move");
+
   const result = AI.analyze(state, {
     timeLimit: 100000,
     maxDepth: 3,
