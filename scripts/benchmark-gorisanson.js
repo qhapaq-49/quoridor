@@ -23,7 +23,11 @@ function parseArgs(argv) {
     ourMaxDepth: null,
     ourWallLimit: null,
     ourReplyWallLimit: null,
-    ourShallowWallLimit: null
+    ourShallowWallLimit: null,
+    mctsRootLimit: null,
+    mctsRolloutWallLimit: null,
+    mctsMaxPlies: null,
+    mctsExploration: null
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -44,6 +48,10 @@ function parseArgs(argv) {
     else if (arg === "--our-wall-limit") args.ourWallLimit = Number(next), i += 1;
     else if (arg === "--our-reply-wall-limit") args.ourReplyWallLimit = Number(next), i += 1;
     else if (arg === "--our-shallow-wall-limit") args.ourShallowWallLimit = Number(next), i += 1;
+    else if (arg === "--mcts-root-limit") args.mctsRootLimit = Number(next), i += 1;
+    else if (arg === "--mcts-rollout-wall-limit") args.mctsRolloutWallLimit = Number(next), i += 1;
+    else if (arg === "--mcts-max-plies") args.mctsMaxPlies = Number(next), i += 1;
+    else if (arg === "--mcts-exploration") args.mctsExploration = Number(next), i += 1;
     else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -73,6 +81,10 @@ Options:
   --our-wall-limit N     Override our AI wall candidate limit
   --our-reply-wall-limit N Override non-root wall candidate limit
   --our-shallow-wall-limit N Override leaf-near wall candidate limit
+  --mcts-root-limit N  Override experimental MCTS root candidate count
+  --mcts-rollout-wall-limit N Override experimental MCTS rollout wall count
+  --mcts-max-plies N   Override experimental MCTS rollout length
+  --mcts-exploration X Override experimental MCTS exploration constant
 `);
 }
 
@@ -154,6 +166,10 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
       if (opts.ourWallLimit !== null) analyzeOptions.wallLimit = opts.ourWallLimit;
       if (opts.ourReplyWallLimit !== null) analyzeOptions.replyWallLimit = opts.ourReplyWallLimit;
       if (opts.ourShallowWallLimit !== null) analyzeOptions.shallowWallLimit = opts.ourShallowWallLimit;
+      if (opts.mctsRootLimit !== null) analyzeOptions.rootLimit = opts.mctsRootLimit;
+      if (opts.mctsRolloutWallLimit !== null) analyzeOptions.rolloutWallLimit = opts.mctsRolloutWallLimit;
+      if (opts.mctsMaxPlies !== null) analyzeOptions.maxPlies = opts.mctsMaxPlies;
+      if (opts.mctsExploration !== null) analyzeOptions.exploration = opts.mctsExploration;
       analyzeOptions.avoid = recentStateHashes(stateHistory);
       analyzeOptions.avoidPawnKeys = recentPawnKeys(stateHistory, state.turn);
       const engine = opts.strategy === "mcts" ? ExperimentalMcts : OurAI;
