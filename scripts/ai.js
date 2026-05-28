@@ -265,7 +265,7 @@
     const bestMoves = [];
     for (const move of moves) {
       const child = Engine.applyKnownLegalAction(state, move);
-      const distance = Engine.shortestPath(child, player).distance;
+      const distance = shortestGoalDistance(child, player);
       if (distance < bestDistance) {
         bestDistance = distance;
         bestMoves.length = 0;
@@ -295,8 +295,7 @@
     if (state.winner !== null) return state.winner === rootPlayer ? 100000 : -100000;
 
     const count = Engine.playerCount(state);
-    const rootPath = Engine.shortestPath(state, rootPlayer);
-    const rootDistance = safeDistance(rootPath.distance);
+    const rootDistance = safeDistance(shortestGoalDistance(state, rootPlayer));
     let nearestOpponent = 99;
     let sumOpponentDistance = 0;
     let opponentWalls = 0;
@@ -305,8 +304,7 @@
 
     for (let i = 0; i < count; i += 1) {
       if (i === rootPlayer) continue;
-      const path = Engine.shortestPath(state, i);
-      const distance = safeDistance(path.distance);
+      const distance = safeDistance(shortestGoalDistance(state, i));
       nearestOpponent = Math.min(nearestOpponent, distance);
       sumOpponentDistance += distance;
       opponentWalls += state.wallsRemaining[i];
@@ -423,9 +421,9 @@
   }
 
   function movePrior(state, move, player) {
-    const before = Engine.shortestPath(state, player).distance;
+    const before = shortestGoalDistance(state, player);
     const child = Engine.applyKnownLegalAction(state, move);
-    const after = Engine.shortestPath(child, player).distance;
+    const after = shortestGoalDistance(child, player);
     let prior = (safeDistance(before) - safeDistance(after)) * 70;
     if (after <= 1) prior += 500;
     if (move.jump) prior += 18;
@@ -434,8 +432,8 @@
 
   function candidateWalls(state, player, limit) {
     const candidates = new Map();
-    const paths = Engine.allShortestPaths(state);
     const count = Engine.playerCount(state);
+    const paths = [];
     const pathWidths = Array(count).fill(0);
 
     function add(orientation, r, c, reason) {
@@ -450,9 +448,10 @@
     }
 
     for (let p = 0; p < count; p += 1) {
-      const edges = allShortestPathEdges(state, p);
-      pathWidths[p] = edges.length;
-      for (const edge of edges) {
+      const path = shortestPathEdgeInfo(state, p);
+      paths.push(path);
+      pathWidths[p] = path.edges.length;
+      for (const edge of path.edges) {
         addWallsBlockingEdge(edge.from, edge.to, (p === player ? 1 : 9), add);
       }
     }
@@ -486,21 +485,21 @@
     for (const wall of preliminary) {
       if (Engine.wallCollision(state, wall.orientation, wall.r, wall.c)) continue;
 
-      const child = Engine.applyKnownLegalAction(state, wall);
       const afterPaths = [];
-      let reachable = true;
-      for (let p = 0; p < count; p += 1) {
-        const path = Engine.shortestPath(child, p);
-        if (path.distance === Infinity) {
-          reachable = false;
-          break;
-        }
-        afterPaths.push(path);
-      }
-      if (!reachable) continue;
-
       const afterWidths = [];
-      for (let p = 0; p < count; p += 1) afterWidths.push(allShortestPathEdges(child, p).length);
+      let reachable = true;
+      withTemporaryWall(state, wall, () => {
+        for (let p = 0; p < count; p += 1) {
+          const path = shortestPathEdgeInfo(state, p);
+          if (path.distance === Infinity) {
+            reachable = false;
+            break;
+          }
+          afterPaths.push(path);
+          afterWidths.push(path.edges.length);
+        }
+      });
+      if (!reachable) continue;
       const score = wallDeltaScoreFromPaths(state, wall, player, paths, afterPaths, pathWidths, afterWidths) + wall.reason;
       scored.push(Object.assign(wall, { prior: score }));
     }
@@ -509,51 +508,129 @@
     return scored.slice(0, limit);
   }
 
-  function allShortestPathEdges(state, player) {
+  function withTemporaryWall(state, wall, fn) {
+    const set = wall.orientation === "h" ? state.hWalls : state.vWalls;
+    const key = wallKey(wall.r, wall.c);
+    set.add(key);
+    try {
+      return fn();
+    } finally {
+      set.delete(key);
+    }
+  }
+
+  function shortestPathEdgeInfo(state, player) {
     const fromStart = shortestDistancesFrom(state, [state.pawns[player]]);
     const goals = goalCells(state, player);
     const fromGoals = shortestDistancesFrom(state, goals);
     let best = Infinity;
-    for (const goal of goals) best = Math.min(best, fromStart[goal.r][goal.c]);
-    if (best === Infinity) return [];
+    for (const goal of goals) best = Math.min(best, fromStart[cellIndex(goal.r, goal.c)]);
+    if (best === Infinity) return { distance: Infinity, edges: [] };
 
     const edges = [];
     for (let r = 0; r < Engine.SIZE; r += 1) {
       for (let c = 0; c < Engine.SIZE; c += 1) {
-        if (fromStart[r][c] === Infinity) continue;
+        const fromIndex = cellIndex(r, c);
+        if (fromStart[fromIndex] === Infinity) continue;
         const from = { r, c };
         for (const dir of Engine.DIRS) {
           const to = { r: r + dir.dr, c: c + dir.dc };
-          if (!Engine.canStep(state, from, to)) continue;
-          if (fromStart[r][c] + 1 + fromGoals[to.r][to.c] === best) {
+          if (!canStepCells(state, r, c, to.r, to.c)) continue;
+          if (fromStart[fromIndex] + 1 + fromGoals[cellIndex(to.r, to.c)] === best) {
             edges.push({ from, to });
           }
         }
       }
     }
-    return edges;
+    return { distance: best, edges };
   }
 
   function shortestDistancesFrom(state, starts) {
-    const dist = Array.from({ length: Engine.SIZE }, () => Array(Engine.SIZE).fill(Infinity));
-    const queue = [];
+    const total = Engine.SIZE * Engine.SIZE;
+    const dist = Array(total).fill(Infinity);
+    const queue = Array(total);
+    let tail = 0;
     for (const start of starts) {
-      dist[start.r][start.c] = 0;
-      queue.push(start);
+      const index = cellIndex(start.r, start.c);
+      dist[index] = 0;
+      queue[tail] = index;
+      tail += 1;
     }
 
-    for (let head = 0; head < queue.length; head += 1) {
-      const current = queue[head];
-      const currentDist = dist[current.r][current.c];
+    for (let head = 0; head < tail; head += 1) {
+      const index = queue[head];
+      const r = ((index / Engine.SIZE) | 0);
+      const c = index - r * Engine.SIZE;
+      const currentDist = dist[index];
       for (const dir of Engine.DIRS) {
-        const next = { r: current.r + dir.dr, c: current.c + dir.dc };
-        if (!Engine.canStep(state, current, next)) continue;
-        if (dist[next.r][next.c] <= currentDist + 1) continue;
-        dist[next.r][next.c] = currentDist + 1;
-        queue.push(next);
+        const nr = r + dir.dr;
+        const nc = c + dir.dc;
+        if (!canStepCells(state, r, c, nr, nc)) continue;
+        const nextIndex = cellIndex(nr, nc);
+        if (dist[nextIndex] <= currentDist + 1) continue;
+        dist[nextIndex] = currentDist + 1;
+        queue[tail] = nextIndex;
+        tail += 1;
       }
     }
     return dist;
+  }
+
+  function cellIndex(r, c) {
+    return r * Engine.SIZE + c;
+  }
+
+  function wallKey(r, c) {
+    return r + "," + c;
+  }
+
+  function shortestGoalDistance(state, player) {
+    const start = state.pawns[player];
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    const dist = Array(Engine.SIZE * Engine.SIZE).fill(-1);
+    const queue = Array(Engine.SIZE * Engine.SIZE);
+    const startIndex = start.r * Engine.SIZE + start.c;
+    dist[startIndex] = 0;
+    queue[0] = startIndex;
+
+    for (let head = 0, tail = 1; head < tail; head += 1) {
+      const index = queue[head];
+      const r = ((index / Engine.SIZE) | 0);
+      const c = index - r * Engine.SIZE;
+      const currentDistance = dist[index];
+      if (isGoalByName(goal, r, c)) return currentDistance;
+
+      for (const dir of Engine.DIRS) {
+        const nr = r + dir.dr;
+        const nc = c + dir.dc;
+        if (!canStepCells(state, r, c, nr, nc)) continue;
+        const nextIndex = cellIndex(nr, nc);
+        if (dist[nextIndex] >= 0) continue;
+        dist[nextIndex] = currentDistance + 1;
+        queue[tail] = nextIndex;
+        tail += 1;
+      }
+    }
+
+    return Infinity;
+  }
+
+  function canStepCells(state, r, c, nr, nc) {
+    if (nr < 0 || nr >= Engine.SIZE || nc < 0 || nc >= Engine.SIZE) return false;
+    if (nr !== r) {
+      const wallRow = r < nr ? r : nr;
+      return !state.hWalls.has(wallKey(wallRow, c)) && !state.hWalls.has(wallKey(wallRow, c - 1));
+    }
+    const wallCol = c < nc ? c : nc;
+    return !state.vWalls.has(wallKey(r, wallCol)) && !state.vWalls.has(wallKey(r - 1, wallCol));
+  }
+
+  function isGoalByName(goal, r, c) {
+    if (goal === "row0") return r === 0;
+    if (goal === "row8") return r === Engine.SIZE - 1;
+    if (goal === "col0") return c === 0;
+    if (goal === "col8") return c === Engine.SIZE - 1;
+    return false;
   }
 
   function goalCells(state, player) {
