@@ -260,24 +260,12 @@
   }
 
   function chooseOpeningBookMove(state, player, variant) {
-    if (state.mode !== 2 || state.wallsRemaining[player] !== 10) return null;
+    if (state.mode !== 2 || state.moveNumber > 5 || state.wallsRemaining[player] <= 0) return null;
     const opponent = 1 - player;
-    const own = state.pawns[player];
     const pawn = state.pawns[opponent];
-    if (own.c !== 4 || pawn.c !== 4) return null;
+    if (pawn.c !== 4) return null;
 
-    const bothAdvanced =
-      state.moveNumber >= 5 &&
-      state.moveNumber <= 8 &&
-      state.pawns[0].r === 6 &&
-      state.pawns[1].r === 2;
-    const earlyReply = state.moveNumber <= 6 && state.wallsRemaining[opponent] < 10;
-    let targetRow = null;
-    if (bothAdvanced) targetRow = pawn.r;
-    else if (earlyReply && pawn.r === 1) targetRow = 2;
-    else if (earlyReply && pawn.r === 7) targetRow = 6;
-
-    const candidates = openingWallCandidates(targetRow, player);
+    const candidates = openingWallCandidates(pawn.r, player);
     if (!candidates) return null;
     if (variant !== undefined && variant !== null && Number.isFinite(Number(variant))) {
       const preferred = candidates[((Number(variant) % candidates.length) + candidates.length) % candidates.length];
