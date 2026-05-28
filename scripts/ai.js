@@ -416,6 +416,8 @@
     let quality = targetDelta * 55 - selfDelta * 75;
 
     if (!anchored && targetDelta <= 1) quality -= 70;
+    if (targetDelta <= 1 && wallBlocksPawnForward(state, wall, target)) quality -= 150;
+    if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) quality += 80;
     if (state.moveNumber <= 18) {
       const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
       if (pressure >= 2 && beforeSelf >= beforeTarget - 1 && targetDelta <= 1) quality -= 150 + pressure * 70;
@@ -426,6 +428,34 @@
     if (selfDelta > 0 && targetDelta <= selfDelta) quality -= 80;
 
     return quality;
+  }
+
+  function wallBlocksPawnForward(state, wall, player) {
+    const pawn = state.pawns[player];
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    if (wall.orientation === "h" && (goal === "row0" || goal === "row8")) {
+      const frontRow = goal === "row0" ? pawn.r - 1 : pawn.r;
+      return wall.r === frontRow && (wall.c === pawn.c || wall.c === pawn.c - 1);
+    }
+    if (wall.orientation === "v" && (goal === "col0" || goal === "col8")) {
+      const frontCol = goal === "col0" ? pawn.c - 1 : pawn.c;
+      return wall.c === frontCol && (wall.r === pawn.r || wall.r === pawn.r - 1);
+    }
+    return false;
+  }
+
+  function wallBlocksPawnSecondStep(state, wall, player) {
+    const pawn = state.pawns[player];
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    if (wall.orientation === "h" && (goal === "row0" || goal === "row8")) {
+      const gateRow = goal === "row0" ? pawn.r - 2 : pawn.r + 1;
+      return wall.r === gateRow && (wall.c === pawn.c || wall.c === pawn.c - 1);
+    }
+    if (wall.orientation === "v" && (goal === "col0" || goal === "col8")) {
+      const gateCol = goal === "col0" ? pawn.c - 2 : pawn.c + 1;
+      return wall.c === gateCol && (wall.r === pawn.r || wall.r === pawn.r - 1);
+    }
+    return false;
   }
 
   function wallSupportsHomeEdge(state, wall, player) {
@@ -478,6 +508,8 @@
     let opponentWalls = 0;
     let opponentProgress = 0;
     let opponentMobility = 0;
+    let opponentImprovingMoves = 0;
+    let opponentEqualMoves = 0;
 
     for (let i = 0; i < count; i += 1) {
       if (i === rootPlayer) continue;
@@ -487,7 +519,10 @@
       sumOpponentDistance += distance;
       opponentWalls += state.wallsRemaining[i];
       opponentProgress = Math.max(opponentProgress, Engine.goalDistanceProgress(state, i));
-      opponentMobility += Engine.legalPawnMoves(state, i).length;
+      const opponentRouteChoicesForPlayer = pawnRouteChoices(state, i, distance);
+      opponentMobility += opponentRouteChoicesForPlayer.total;
+      opponentImprovingMoves += opponentRouteChoicesForPlayer.improving;
+      opponentEqualMoves += opponentRouteChoicesForPlayer.equal;
     }
 
     const opponentCount = count - 1;
@@ -496,7 +531,8 @@
     const raceDelta = nearestOpponentRacePlies - rootRacePlies;
     const wallPressureBalance = state.wallsRemaining[rootPlayer] * nearestOpponentRacePlies - averageOpponentWalls * rootRacePlies;
     const rootProgress = Engine.goalDistanceProgress(state, rootPlayer);
-    const rootMobility = Engine.legalPawnMoves(state, rootPlayer).length;
+    const rootRouteChoices = pawnRouteChoices(state, rootPlayer, rootDistance);
+    const rootMobility = rootRouteChoices.total;
 
     let score = 0;
     score += (nearestOpponent - rootDistance) * 132;
@@ -507,6 +543,10 @@
     score += (state.wallsRemaining[rootPlayer] - averageOpponentWalls) * 13;
     score += (rootProgress - opponentProgress) * 8;
     score += (rootMobility - opponentMobility / opponentCount) * 4;
+    score += (rootRouteChoices.improving - opponentImprovingMoves / opponentCount) * (count === 2 ? 36 : 16);
+    score += (rootRouteChoices.equal - opponentEqualMoves / opponentCount) * (count === 2 ? 12 : 5);
+    if (count === 2 && rootRouteChoices.improving === 0 && rootDistance > 1) score -= 120;
+    if (count === 2 && opponentImprovingMoves === 0 && nearestOpponent > 1) score += 90;
 
     if (rootDistance <= 1) score += 720;
     if (nearestOpponent <= 1) score -= 880;
@@ -523,6 +563,24 @@
     if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += 150;
 
     return score;
+  }
+
+  function pawnRouteChoices(state, player, currentDistance) {
+    const moves = Engine.legalPawnMoves(state, player);
+    const original = state.pawns[player];
+    let improving = 0;
+    let equal = 0;
+    try {
+      for (const move of moves) {
+        state.pawns[player] = { r: move.to.r, c: move.to.c };
+        const distance = shortestGoalDistance(state, player);
+        if (distance < currentDistance) improving += 1;
+        else if (distance === currentDistance) equal += 1;
+      }
+    } finally {
+      state.pawns[player] = original;
+    }
+    return { total: moves.length, improving, equal };
   }
 
   function safeDistance(distance) {

@@ -107,6 +107,36 @@ function testAiAvoidsSevereWallTrapAtLeaf() {
   assert.ok(!Engine.actionEquals(result.bestMove, fragileRun));
 }
 
+function testAiPrefersGateWallToContactWall() {
+  let state = Engine.createState(2);
+  const actions = [
+    { type: "move", to: { r: 7, c: 4 } },
+    { type: "move", to: { r: 1, c: 4 } },
+    { type: "move", to: { r: 6, c: 4 } },
+    { type: "move", to: { r: 2, c: 4 } },
+    { type: "wall", orientation: "h", r: 2, c: 3 },
+    { type: "wall", orientation: "h", r: 1, c: 5 },
+    { type: "move", to: { r: 5, c: 4 } },
+    { type: "move", to: { r: 2, c: 5 } },
+    { type: "move", to: { r: 4, c: 4 } },
+    { type: "move", to: { r: 3, c: 5 } }
+  ];
+  for (const action of actions) state = Engine.applyAction(state, action);
+
+  const result = AI.analyze(state, {
+    timeLimit: 100000,
+    maxDepth: 2,
+    wallLimit: 6,
+    randomness: 0,
+    rootPlayer: 0
+  });
+
+  assert.strictEqual(result.bestMove.type, "wall");
+  assert.strictEqual(result.bestMove.orientation, "h");
+  assert.strictEqual(result.bestMove.r, 4);
+  assert.strictEqual(result.bestMove.c, 5);
+}
+
 function testAiReturnsLegalMove() {
   const state = Engine.createState(2);
   const result = AI.analyze(state, {
@@ -127,6 +157,7 @@ testFourPlayerSetup();
 testAiLeafRecognizesImmediateLoss();
 testAiNoWallRaceUsesTempo();
 testAiAvoidsSevereWallTrapAtLeaf();
+testAiPrefersGateWallToContactWall();
 testAiReturnsLegalMove();
 
 console.log("engine tests passed");
