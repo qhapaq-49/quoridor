@@ -420,6 +420,8 @@
     if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) quality += 80;
     if (state.moveNumber <= 18) {
       const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
+      const pathLead = beforeTarget - beforeSelf;
+      if (pressure >= 2 && pathLead >= 1 && targetDelta <= 2) quality -= 620;
       if (pressure >= 2 && beforeSelf >= beforeTarget - 1 && targetDelta <= 1) quality -= 150 + pressure * 70;
       if (pressure >= 2 && wallSupportsHomeEdge(state, wall, player)) quality += 45;
     }
