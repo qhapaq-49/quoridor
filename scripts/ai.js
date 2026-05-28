@@ -3,6 +3,7 @@
 
   const Engine = typeof require === "function" ? require("./engine.js") : root.QuoridorEngine;
   const INF = 1e9;
+  const TACTICAL_WALL_PRIOR = 220;
 
   const PRESETS = {
     fast: { timeLimit: 450, maxDepth: 2, wallLimit: 6 },
@@ -198,13 +199,56 @@
     if (winningMoves.length > 0) return winningMoves;
 
     const threats = immediateGoalThreatPlayers(state, player);
-    if (threats.length === 0 || state.wallsRemaining[player] <= 0) return [];
+    if (state.wallsRemaining[player] <= 0) return [];
+
+    if (threats.length === 0) return tacticalWallActions(state, player, 3);
 
     const walls = candidateWalls(state, player, Math.max(opts.wallLimit || 6, 8));
     return walls.filter((wall) => {
       const child = Engine.applyKnownLegalAction(state, wall);
       return threats.every((threatPlayer) => !hasImmediateGoalMove(child, threatPlayer));
     });
+  }
+
+  function tacticalWallActions(state, player, limit) {
+    if (state.mode !== 2 || state.wallsRemaining[player] <= 0) return [];
+    const target = 1 - player;
+    const beforeTarget = shortestGoalDistance(state, target);
+    if (beforeTarget === Infinity) return [];
+
+    const candidates = new Map();
+    const path = shortestPathEdgeInfo(state, target);
+    function add(orientation, r, c, reason) {
+      if (!Engine.inWallBoard(r, c)) return;
+      const id = orientation + ":" + r + "," + c;
+      const existing = candidates.get(id);
+      if (existing) {
+        existing.reason += reason;
+        return;
+      }
+      candidates.set(id, { type: "wall", player, orientation, r, c, reason });
+    }
+    for (const edge of path.edges) addWallsBlockingEdge(edge.from, edge.to, 1, add);
+
+    const scored = [];
+    const preliminary = Array.from(candidates.values()).sort((a, b) => b.reason - a.reason).slice(0, 12);
+    for (const wall of preliminary) {
+      if (Engine.wallCollision(state, wall.orientation, wall.r, wall.c)) continue;
+      let targetAfter = Infinity;
+      let selfAfter = Infinity;
+      withTemporaryWall(state, wall, () => {
+        targetAfter = shortestGoalDistance(state, target);
+        selfAfter = shortestGoalDistance(state, player);
+      });
+      if (targetAfter === Infinity || selfAfter === Infinity) continue;
+      const delta = targetAfter - beforeTarget;
+      const prior = delta * 100 + wall.reason;
+      if (prior < TACTICAL_WALL_PRIOR) continue;
+      wall.prior = prior;
+      scored.push(wall);
+    }
+
+    return scored.sort((a, b) => b.prior - a.prior).slice(0, limit);
   }
 
   function immediateGoalThreatPlayers(state, player) {
@@ -381,13 +425,17 @@
     const opponentCount = count - 1;
     const averageOpponentDistance = sumOpponentDistance / opponentCount;
     const averageOpponentWalls = opponentWalls / opponentCount;
+    const raceDelta = nearestOpponentRacePlies - rootRacePlies;
+    const wallPressureBalance = state.wallsRemaining[rootPlayer] * nearestOpponentRacePlies - averageOpponentWalls * rootRacePlies;
     const rootProgress = Engine.goalDistanceProgress(state, rootPlayer);
     const rootMobility = Engine.legalPawnMoves(state, rootPlayer).length;
 
     let score = 0;
     score += (nearestOpponent - rootDistance) * 132;
     score += (averageOpponentDistance - rootDistance) * 42;
-    score += (nearestOpponentRacePlies - rootRacePlies) * (count === 2 ? 24 : 12);
+    score += raceDelta * (count === 2 ? 24 : 12);
+    score += wallPressureBalance * (count === 2 ? 5 : 2);
+    if (raceDelta > 0) score -= rootRacePlies * (count === 2 ? 10 : 4);
     score += (state.wallsRemaining[rootPlayer] - averageOpponentWalls) * 13;
     score += (rootProgress - opponentProgress) * 8;
     score += (rootMobility - opponentMobility / opponentCount) * 4;
@@ -398,7 +446,6 @@
     if (nearestOpponent <= 2 && state.wallsRemaining[rootPlayer] > 0) score -= 120;
 
     if (count === 2 && state.wallsRemaining[rootPlayer] === 0 && averageOpponentWalls === 0) {
-      const raceDelta = nearestOpponentRacePlies - rootRacePlies;
       score += raceDelta * 180;
       if (raceDelta > 0) score += 650;
       else if (raceDelta < 0) score -= 650;

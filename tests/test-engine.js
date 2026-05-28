@@ -82,6 +82,30 @@ function testAiNoWallRaceUsesTempo() {
   assert.ok(AI.evaluate(opponentTurn, 0) < -500);
 }
 
+function testAiAvoidsSevereWallTrapAtLeaf() {
+  let state = Engine.createState(2);
+  const actions = [
+    { type: "move", to: { r: 7, c: 4 } },
+    { type: "move", to: { r: 1, c: 4 } },
+    { type: "move", to: { r: 6, c: 4 } },
+    { type: "wall", orientation: "h", r: 5, c: 4 },
+    { type: "move", to: { r: 6, c: 3 } },
+    { type: "wall", orientation: "h", r: 5, c: 2 }
+  ];
+  for (const action of actions) state = Engine.applyAction(state, action);
+
+  const fragileRun = { type: "move", player: 0, to: { r: 6, c: 2 } };
+  const result = AI.analyze(state, {
+    timeLimit: 100000,
+    maxDepth: 1,
+    wallLimit: 8,
+    randomness: 0,
+    rootPlayer: 0
+  });
+
+  assert.ok(!Engine.actionEquals(result.bestMove, fragileRun));
+}
+
 function testAiReturnsLegalMove() {
   const state = Engine.createState(2);
   const result = AI.analyze(state, {
@@ -101,6 +125,7 @@ testJumpAndDiagonal();
 testFourPlayerSetup();
 testAiLeafRecognizesImmediateLoss();
 testAiNoWallRaceUsesTempo();
+testAiAvoidsSevereWallTrapAtLeaf();
 testAiReturnsLegalMove();
 
 console.log("engine tests passed");
