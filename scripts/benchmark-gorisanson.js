@@ -21,7 +21,9 @@ function parseArgs(argv) {
     bookVariant: null,
     ourTimeLimit: null,
     ourMaxDepth: null,
-    ourWallLimit: null
+    ourWallLimit: null,
+    ourReplyWallLimit: null,
+    ourShallowWallLimit: null
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -40,6 +42,8 @@ function parseArgs(argv) {
     else if (arg === "--our-time-limit") args.ourTimeLimit = Number(next), i += 1;
     else if (arg === "--our-max-depth") args.ourMaxDepth = Number(next), i += 1;
     else if (arg === "--our-wall-limit") args.ourWallLimit = Number(next), i += 1;
+    else if (arg === "--our-reply-wall-limit") args.ourReplyWallLimit = Number(next), i += 1;
+    else if (arg === "--our-shallow-wall-limit") args.ourShallowWallLimit = Number(next), i += 1;
     else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -67,6 +71,8 @@ Options:
   --our-time-limit N     Override our AI time limit in ms
   --our-max-depth N      Override our AI max depth
   --our-wall-limit N     Override our AI wall candidate limit
+  --our-reply-wall-limit N Override non-root wall candidate limit
+  --our-shallow-wall-limit N Override leaf-near wall candidate limit
 `);
 }
 
@@ -146,6 +152,8 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
       if (opts.ourTimeLimit !== null) analyzeOptions.timeLimit = opts.ourTimeLimit;
       if (opts.ourMaxDepth !== null) analyzeOptions.maxDepth = opts.ourMaxDepth;
       if (opts.ourWallLimit !== null) analyzeOptions.wallLimit = opts.ourWallLimit;
+      if (opts.ourReplyWallLimit !== null) analyzeOptions.replyWallLimit = opts.ourReplyWallLimit;
+      if (opts.ourShallowWallLimit !== null) analyzeOptions.shallowWallLimit = opts.ourShallowWallLimit;
       analyzeOptions.avoid = recentStateHashes(stateHistory);
       analyzeOptions.avoidPawnKeys = recentPawnKeys(stateHistory, state.turn);
       const engine = opts.strategy === "mcts" ? ExperimentalMcts : OurAI;
