@@ -174,6 +174,36 @@ function testAiConvertsWallLeadWithPawnMove() {
   assert.deepStrictEqual(result.bestMove.to, { r: 5, c: 4 });
 }
 
+function testAiMaintainsTempoWithLargeWallLead() {
+  let state = Engine.createState(2);
+  const actions = [
+    { type: "move", to: { r: 7, c: 4 } },
+    { type: "move", to: { r: 1, c: 4 } },
+    { type: "move", to: { r: 6, c: 4 } },
+    { type: "move", to: { r: 2, c: 4 } },
+    { type: "wall", orientation: "h", r: 2, c: 3 },
+    { type: "wall", orientation: "h", r: 1, c: 5 },
+    { type: "move", to: { r: 5, c: 4 } },
+    { type: "wall", orientation: "h", r: 0, c: 0 },
+    { type: "move", to: { r: 4, c: 4 } },
+    { type: "wall", orientation: "v", r: 3, c: 4 },
+    { type: "move", to: { r: 5, c: 4 } },
+    { type: "wall", orientation: "v", r: 2, c: 5 }
+  ];
+  for (const action of actions) state = Engine.applyAction(state, action);
+
+  const result = AI.analyze(state, {
+    timeLimit: 100000,
+    maxDepth: 3,
+    wallLimit: 6,
+    randomness: 0,
+    rootPlayer: 0
+  });
+
+  assert.strictEqual(result.bestMove.type, "move");
+  assert.deepStrictEqual(result.bestMove.to, { r: 5, c: 5 });
+}
+
 function testAiReturnsLegalMove() {
   const state = Engine.createState(2);
   const result = AI.analyze(state, {
@@ -196,6 +226,7 @@ testAiNoWallRaceUsesTempo();
 testAiAvoidsSevereWallTrapAtLeaf();
 testAiPrefersGateWallToContactWall();
 testAiConvertsWallLeadWithPawnMove();
+testAiMaintainsTempoWithLargeWallLead();
 testAiReturnsLegalMove();
 
 console.log("engine tests passed");
