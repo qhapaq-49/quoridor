@@ -32,7 +32,7 @@
     let completedDepth = 0;
     let nodes = 0;
 
-    const bookMove = chooseOpeningBookMove(state, rootPlayer, opts.bookVariant) || chooseOpeningFollowupMove(state, rootPlayer);
+    const bookMove = chooseOpeningBookMove(state, rootPlayer, opts.bookVariant, randomAmount) || chooseOpeningFollowupMove(state, rootPlayer);
     if (bookMove) {
       return {
         bestMove: bookMove,
@@ -259,7 +259,7 @@
     return distance === Infinity ? 99 : distance;
   }
 
-  function chooseOpeningBookMove(state, player, variant) {
+  function chooseOpeningBookMove(state, player, variant, randomAmount) {
     if (state.mode !== 2 || state.moveNumber > 5 || state.wallsRemaining[player] <= 0) return null;
     const opponent = 1 - player;
     const pawn = state.pawns[opponent];
@@ -267,9 +267,13 @@
 
     const candidates = openingWallCandidates(pawn.r, player);
     if (!candidates) return null;
+    const legalCandidates = candidates.filter((action) => Engine.legalWall(state, action.orientation, action.r, action.c, player));
     if (variant !== undefined && variant !== null && Number.isFinite(Number(variant))) {
       const preferred = candidates[((Number(variant) % candidates.length) + candidates.length) % candidates.length];
       if (Engine.legalWall(state, preferred.orientation, preferred.r, preferred.c, player)) return preferred;
+    }
+    if (legalCandidates.length > 0 && randomAmount > 0.005 && Math.random() < Math.min(0.5, randomAmount * 2.5)) {
+      return legalCandidates[Math.floor(Math.random() * legalCandidates.length)];
     }
     let best = null;
     let bestScore = -INF;
