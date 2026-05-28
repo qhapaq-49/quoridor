@@ -32,7 +32,8 @@ function parseArgs(argv) {
     ourVerifyTop: null,
     ourVerifyScale: null,
     ourVerifyMaxPlies: null,
-    ourVerifyRolloutWallLimit: null
+    ourVerifyRolloutWallLimit: null,
+    traceOurs: 0
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -62,6 +63,7 @@ function parseArgs(argv) {
     else if (arg === "--our-verify-scale") args.ourVerifyScale = Number(next), i += 1;
     else if (arg === "--our-verify-max-plies") args.ourVerifyMaxPlies = Number(next), i += 1;
     else if (arg === "--our-verify-rollout-wall-limit") args.ourVerifyRolloutWallLimit = Number(next), i += 1;
+    else if (arg === "--trace-ours") args.traceOurs = Number(next), i += 1;
     else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -100,6 +102,7 @@ Options:
   --our-verify-scale N Rollout verification score scale
   --our-verify-max-plies N Rollout verification length
   --our-verify-rollout-wall-limit N Rollout verification wall count
+  --trace-ours N      Print top N of our candidates on each of our turns
 `);
 }
 
@@ -162,6 +165,9 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
   const started = Date.now();
   let ourThinkMs = 0;
   let gorisansonThinkMs = 0;
+  let ourMoveCount = 0;
+  let ourDepthTotal = 0;
+  let ourNodesTotal = 0;
   const stateHistory = [ourStateFromGorisanson(game)];
 
   for (let ply = 0; ply < opts.maxPlies && game.winner === null; ply += 1) {
@@ -194,7 +200,12 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
       analyzeOptions.avoidPawnKeys = recentPawnKeys(stateHistory, state.turn);
       const engine = opts.strategy === "mcts" ? ExperimentalMcts : OurAI;
       const result = engine.analyze(state, analyzeOptions);
-      ourThinkMs += Date.now() - t0;
+      const elapsed = Date.now() - t0;
+      ourThinkMs += elapsed;
+      ourMoveCount += 1;
+      ourDepthTotal += result.depth || 0;
+      ourNodesTotal += result.nodes || 0;
+      if (opts.traceOurs > 0) emitOurTrace(opts, gameIndex, ply, state, result, elapsed);
       if (!result.chosenMove) throw new Error("Our AI returned no move");
       move = ourActionToGorisansonMove(result.chosenMove);
     } else {
@@ -221,8 +232,48 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
     durationMs: Date.now() - started,
     ourThinkMs,
     gorisansonThinkMs,
+    ourMoveCount,
+    ourDepthTotal,
+    ourNodesTotal,
     moves
   };
+}
+
+function emitOurTrace(opts, gameIndex, ply, state, result, elapsed) {
+  const candidates = result.candidates.slice(0, opts.traceOurs).map((entry) => ({
+    rank: entry.rank,
+    move: actionToText(entry.action),
+    score: roundNumber(entry.score),
+    verify: entry.verify === undefined ? undefined : roundNumber(entry.verify),
+    verifyCount: entry.verifyCount
+  }));
+  console.log(JSON.stringify({
+    type: "our-trace",
+    game: gameIndex + 1,
+    ply: ply + 1,
+    player: state.turn,
+    moveNumber: state.moveNumber,
+    pawns: state.pawns,
+    wallsRemaining: state.wallsRemaining,
+    distances: Engine.allShortestPaths(state).map((path) => path.distance),
+    best: actionToText(result.bestMove),
+    chosen: actionToText(result.chosenMove),
+    depth: result.depth,
+    nodes: result.nodes,
+    timeMs: elapsed,
+    candidates
+  }));
+}
+
+function actionToText(action) {
+  if (!action) return null;
+  if (action.type === "move") return Engine.squareName(action.to.r, action.to.c);
+  return (action.orientation === "h" ? "H" : "V") + Engine.wallName(action.r, action.c);
+}
+
+function roundNumber(value) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return value;
+  return Math.round(value * 1000) / 1000;
 }
 
 function recentStateHashes(history) {
@@ -258,7 +309,9 @@ function summarize(results) {
     darkWins,
     avgPlies: average(results.map((result) => result.plies)),
     avgOurThinkMs: average(results.map((result) => result.ourThinkMs / Math.max(1, Math.ceil(result.plies / 2)))),
-    avgGorisansonThinkMs: average(results.map((result) => result.gorisansonThinkMs / Math.max(1, Math.floor(result.plies / 2))))
+    avgGorisansonThinkMs: average(results.map((result) => result.gorisansonThinkMs / Math.max(1, Math.floor(result.plies / 2)))),
+    avgOurDepth: average(results.map((result) => result.ourDepthTotal / Math.max(1, result.ourMoveCount))),
+    avgOurNodes: average(results.map((result) => result.ourNodesTotal / Math.max(1, result.ourMoveCount)))
   };
 }
 

@@ -482,7 +482,7 @@
     const scored = [];
     const preliminary = Array.from(candidates.values())
       .sort((a, b) => b.reason - a.reason)
-      .slice(0, Math.max(limit * 2, 12));
+      .slice(0, Math.max(limit * 4, 24));
     for (const wall of preliminary) {
       if (Engine.wallCollision(state, wall.orientation, wall.r, wall.c)) continue;
 
