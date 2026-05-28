@@ -27,7 +27,12 @@ function parseArgs(argv) {
     mctsRootLimit: null,
     mctsRolloutWallLimit: null,
     mctsMaxPlies: null,
-    mctsExploration: null
+    mctsExploration: null,
+    ourVerifyRollouts: null,
+    ourVerifyTop: null,
+    ourVerifyScale: null,
+    ourVerifyMaxPlies: null,
+    ourVerifyRolloutWallLimit: null
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -52,6 +57,11 @@ function parseArgs(argv) {
     else if (arg === "--mcts-rollout-wall-limit") args.mctsRolloutWallLimit = Number(next), i += 1;
     else if (arg === "--mcts-max-plies") args.mctsMaxPlies = Number(next), i += 1;
     else if (arg === "--mcts-exploration") args.mctsExploration = Number(next), i += 1;
+    else if (arg === "--our-verify-rollouts") args.ourVerifyRollouts = Number(next), i += 1;
+    else if (arg === "--our-verify-top") args.ourVerifyTop = Number(next), i += 1;
+    else if (arg === "--our-verify-scale") args.ourVerifyScale = Number(next), i += 1;
+    else if (arg === "--our-verify-max-plies") args.ourVerifyMaxPlies = Number(next), i += 1;
+    else if (arg === "--our-verify-rollout-wall-limit") args.ourVerifyRolloutWallLimit = Number(next), i += 1;
     else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -85,6 +95,11 @@ Options:
   --mcts-rollout-wall-limit N Override experimental MCTS rollout wall count
   --mcts-max-plies N   Override experimental MCTS rollout length
   --mcts-exploration X Override experimental MCTS exploration constant
+  --our-verify-rollouts N Run rollout verification per top alpha-beta move
+  --our-verify-top N  Number of top alpha-beta moves to verify
+  --our-verify-scale N Rollout verification score scale
+  --our-verify-max-plies N Rollout verification length
+  --our-verify-rollout-wall-limit N Rollout verification wall count
 `);
 }
 
@@ -170,6 +185,11 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
       if (opts.mctsRolloutWallLimit !== null) analyzeOptions.rolloutWallLimit = opts.mctsRolloutWallLimit;
       if (opts.mctsMaxPlies !== null) analyzeOptions.maxPlies = opts.mctsMaxPlies;
       if (opts.mctsExploration !== null) analyzeOptions.exploration = opts.mctsExploration;
+      if (opts.ourVerifyRollouts !== null) analyzeOptions.verifyRollouts = opts.ourVerifyRollouts;
+      if (opts.ourVerifyTop !== null) analyzeOptions.verifyTop = opts.ourVerifyTop;
+      if (opts.ourVerifyScale !== null) analyzeOptions.verifyScale = opts.ourVerifyScale;
+      if (opts.ourVerifyMaxPlies !== null) analyzeOptions.verifyMaxPlies = opts.ourVerifyMaxPlies;
+      if (opts.ourVerifyRolloutWallLimit !== null) analyzeOptions.verifyRolloutWallLimit = opts.ourVerifyRolloutWallLimit;
       analyzeOptions.avoid = recentStateHashes(stateHistory);
       analyzeOptions.avoidPawnKeys = recentPawnKeys(stateHistory, state.turn);
       const engine = opts.strategy === "mcts" ? ExperimentalMcts : OurAI;

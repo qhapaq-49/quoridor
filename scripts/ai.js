@@ -104,6 +104,10 @@
       rank: index + 1
     }));
 
+    if ((opts.verifyRollouts || 0) > 0 && ranked.length > 1 && now() < deadline) {
+      ranked = verifyRankedWithRollouts(state, ranked, rootPlayer, opts, deadline);
+    }
+
     const chosen = chooseWithRandomness(ranked, randomAmount);
     return {
       bestMove: ranked[0] ? ranked[0].action : null,
@@ -199,6 +203,82 @@
       if (roll <= 0) return pool[i];
     }
     return pool[pool.length - 1];
+  }
+
+  function verifyRankedWithRollouts(state, ranked, rootPlayer, opts, deadline) {
+    const top = Math.min(opts.verifyTop || 3, ranked.length);
+    const perAction = Math.max(1, Math.floor(opts.verifyRollouts || 0));
+    const scale = opts.verifyScale || 360;
+    const maxPlies = opts.verifyMaxPlies || 70;
+    const rolloutWallLimit = opts.verifyRolloutWallLimit || 4;
+
+    const verified = ranked.map((entry, index) => {
+      if (index >= top || now() >= deadline) return entry;
+      const child = Engine.applyKnownLegalAction(state, entry.action);
+      let total = 0;
+      let count = 0;
+      for (let i = 0; i < perAction && now() < deadline; i += 1) {
+        total += rolloutValue(child, rootPlayer, maxPlies, rolloutWallLimit, deadline);
+        count += 1;
+      }
+      if (count === 0) return entry;
+      const average = total / count;
+      return Object.assign({}, entry, { score: entry.score + (average - 0.5) * scale, verify: average, verifyCount: count });
+    });
+
+    return verified
+      .sort((a, b) => b.score - a.score)
+      .map((entry, index) => Object.assign({}, entry, { rank: index + 1 }));
+  }
+
+  function rolloutValue(startState, rootPlayer, maxPlies, wallLimit, deadline) {
+    let state = startState;
+    for (let ply = 0; ply < maxPlies && state.winner === null && now() < deadline; ply += 1) {
+      const action = rolloutAction(state, wallLimit);
+      if (!action) break;
+      state = Engine.applyKnownLegalAction(state, action);
+    }
+    if (state.winner !== null) return state.winner === rootPlayer ? 1 : 0;
+    return normalizedScore(evaluate(state, rootPlayer));
+  }
+
+  function rolloutAction(state, wallLimit) {
+    const player = state.turn;
+    const moves = Engine.legalPawnMoves(state, player);
+    for (const move of moves) {
+      const child = Engine.applyKnownLegalAction(state, move);
+      if (child.winner === player) return move;
+    }
+
+    if (Math.random() < 0.72) return randomShortestMove(state, player, moves);
+
+    if (state.wallsRemaining[player] > 0) {
+      const walls = candidateWalls(state, player, wallLimit);
+      if (walls.length > 0) return walls[Math.floor(Math.random() * Math.min(3, walls.length))];
+    }
+
+    return moves[Math.floor(Math.random() * moves.length)] || null;
+  }
+
+  function randomShortestMove(state, player, moves) {
+    let bestDistance = Infinity;
+    const bestMoves = [];
+    for (const move of moves) {
+      const child = Engine.applyKnownLegalAction(state, move);
+      const distance = Engine.shortestPath(child, player).distance;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestMoves.length = 0;
+        bestMoves.push(move);
+      } else if (distance === bestDistance) {
+        bestMoves.push(move);
+      }
+    }
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)] || moves[0] || null;
+  }
+
+  function normalizedScore(score) {
+    return 1 / (1 + Math.exp(-score / 420));
   }
 
   function repetitionPenalty(state, player, action, opts) {
