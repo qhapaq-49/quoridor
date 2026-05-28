@@ -399,7 +399,8 @@
   function actionAdjustment(state, action, rootPlayer) {
     if (state.mode !== 2) return 0;
     const actor = action.player === undefined ? state.turn : action.player;
-    const quality = action.type === "wall" ? action.adjustment || 0 : moveActionQuality(state, action, actor);
+    let quality = action.type === "wall" ? action.adjustment || 0 : moveActionQuality(state, action, actor);
+    if (action.type === "wall" && actor === rootPlayer) quality += action.rootAdjustment || 0;
     return actor === rootPlayer ? quality : -quality;
   }
 
@@ -458,11 +459,13 @@
     if (targetDelta <= 1 && wallBlocksPawnForward(state, wall, target)) {
       const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
       const pathLead = beforeTarget - beforeSelf;
-      quality -= pathLead >= 0 || pressure >= 2 ? 150 : 25;
+      if (beforeTarget <= 3 && pathLead < 0) quality += wallBlocksPawnPrimaryForward(state, wall, target) ? 195 : 155;
+      else quality -= pathLead >= 0 || pressure >= 2 ? 150 : 25;
     }
     if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) quality += 120;
     const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
     const pathLead = beforeTarget - beforeSelf;
+    if (pressure >= 3 && pathLead < 0 && beforeSelf >= 12 && selfDelta === 0 && pathLead + targetDelta <= 0) quality -= 260;
     if (pressure >= 3 && targetDelta <= 1 && !anchored && wallDistanceToPawn(state, wall, target) <= 2) quality -= 130;
     if (state.moveNumber <= 18) {
       if (pressure >= 2 && pathLead >= 1 && targetDelta <= 2) quality -= 720;
@@ -472,9 +475,26 @@
     }
     if (anchored && targetDelta >= 1) quality += 25;
     if (targetDelta >= 2) quality += 80;
+    if (state.wallsRemaining[target] === 0 && targetDelta >= 2 && selfDelta === 0 && wallDistanceToPawn(state, wall, target) <= 3) quality += 300;
     if (selfDelta > 0 && targetDelta <= selfDelta) quality -= 80;
 
     return quality;
+  }
+
+  function rootWallAdjustment(state, wall, player, beforePaths, afterPaths) {
+    if (state.mode !== 2) return 0;
+    const target = 1 - player;
+    const beforeSelf = safeDistance(beforePaths[player].distance);
+    const afterSelf = safeDistance(afterPaths[player].distance);
+    const beforeTarget = safeDistance(beforePaths[target].distance);
+    const afterTarget = safeDistance(afterPaths[target].distance);
+    const targetDelta = Math.max(0, afterTarget - beforeTarget);
+    const selfDelta = Math.max(0, afterSelf - beforeSelf);
+    const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
+    const pathLead = beforeTarget - beforeSelf;
+    if (state.moveNumber <= 18 && pressure >= 3 && pathLead < 0 && targetDelta >= 1 && selfDelta === 0 && wallDistanceToPawn(state, wall, player) <= 2) return 520;
+    if (state.moveNumber >= 20 && state.moveNumber <= 30 && pressure <= -2 && pathLead <= -2 && state.wallsRemaining[player] <= 4 && targetDelta <= 2 && selfDelta === 0) return -380;
+    return 0;
   }
 
   function wallDistanceToPawn(state, wall, player) {
@@ -500,6 +520,20 @@
     if (wall.orientation === "v" && (goal === "col0" || goal === "col8")) {
       const frontCol = goal === "col0" ? pawn.c - 1 : pawn.c;
       return wall.c === frontCol && (wall.r === pawn.r || wall.r === pawn.r - 1);
+    }
+    return false;
+  }
+
+  function wallBlocksPawnPrimaryForward(state, wall, player) {
+    const pawn = state.pawns[player];
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    if (wall.orientation === "h" && (goal === "row0" || goal === "row8")) {
+      const frontRow = goal === "row0" ? pawn.r - 1 : pawn.r;
+      return wall.r === frontRow && wall.c === pawn.c;
+    }
+    if (wall.orientation === "v" && (goal === "col0" || goal === "col8")) {
+      const frontCol = goal === "col0" ? pawn.c - 1 : pawn.c;
+      return wall.c === frontCol && wall.r === pawn.r;
     }
     return false;
   }
@@ -842,8 +876,9 @@
       });
       if (!reachable) continue;
       const adjustment = wallActionQualityFromPaths(state, wall, player, paths, afterPaths);
+      const rootAdjustment = rootWallAdjustment(state, wall, player, paths, afterPaths);
       const score = wallDeltaScoreFromPaths(state, wall, player, paths, afterPaths, pathWidths, afterWidths) + wall.reason;
-      scored.push(Object.assign(wall, { prior: score, adjustment }));
+      scored.push(Object.assign(wall, { prior: score, adjustment, rootAdjustment }));
     }
 
     scored.sort((a, b) => b.prior - a.prior);
