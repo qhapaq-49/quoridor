@@ -45,6 +45,43 @@ function testFourPlayerSetup() {
   }
 }
 
+function testAiLeafRecognizesImmediateLoss() {
+  const state = Engine.createState(2);
+  state.moveNumber = 30;
+  state.turn = 0;
+  state.pawns = [{ r: 4, c: 4 }, { r: 7, c: 4 }];
+  state.wallsRemaining = [5, 5];
+
+  const quietMove = { type: "move", player: 0, to: { r: 3, c: 4 } };
+  const losingChild = Engine.applyKnownLegalAction(state, quietMove);
+  assert.strictEqual(AI.evaluate(losingChild, 0), -96000);
+
+  const result = AI.analyze(state, {
+    timeLimit: 100000,
+    maxDepth: 1,
+    wallLimit: 8,
+    randomness: 0,
+    rootPlayer: 0
+  });
+  assert.strictEqual(result.bestMove.type, "wall");
+  const blockedChild = Engine.applyKnownLegalAction(state, result.bestMove);
+  assert.ok(!Engine.legalPawnMoves(blockedChild, 1).some((move) => move.to.r === 8));
+}
+
+function testAiNoWallRaceUsesTempo() {
+  const rootTurn = Engine.createState(2);
+  rootTurn.moveNumber = 80;
+  rootTurn.turn = 0;
+  rootTurn.pawns = [{ r: 2, c: 4 }, { r: 6, c: 4 }];
+  rootTurn.wallsRemaining = [0, 0];
+
+  const opponentTurn = Engine.cloneState(rootTurn);
+  opponentTurn.turn = 1;
+
+  assert.ok(AI.evaluate(rootTurn, 0) > 500);
+  assert.ok(AI.evaluate(opponentTurn, 0) < -500);
+}
+
 function testAiReturnsLegalMove() {
   const state = Engine.createState(2);
   const result = AI.analyze(state, {
@@ -62,6 +99,8 @@ testInitialPaths();
 testWallBlockingAndOverlap();
 testJumpAndDiagonal();
 testFourPlayerSetup();
+testAiLeafRecognizesImmediateLoss();
+testAiNoWallRaceUsesTempo();
 testAiReturnsLegalMove();
 
 console.log("engine tests passed");

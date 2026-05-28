@@ -127,7 +127,8 @@
     }
     bumpNode();
 
-    if (state.winner !== null || depth <= 0) return evaluate(state, rootPlayer);
+    if (state.winner !== null) return evaluate(state, rootPlayer);
+    if (depth <= 0) return quiescence(state, rootPlayer, alpha, beta, deadline, opts, bumpNode, opts.quiescenceDepth === undefined ? 1 : opts.quiescenceDepth);
 
     const hash = Engine.stateHash(state) + ":" + depth + ":" + rootPlayer;
     const cached = table.get(hash);
@@ -159,6 +160,65 @@
 
     if (exact) table.set(hash, value);
     return value;
+  }
+
+  function quiescence(state, rootPlayer, alpha, beta, deadline, opts, bumpNode, depth) {
+    if (now() > deadline) {
+      const err = new Error("Search timeout");
+      err.timeout = true;
+      throw err;
+    }
+    bumpNode();
+
+    const standPat = evaluate(state, rootPlayer);
+    if (depth <= 0 || Math.abs(standPat) >= 90000) return standPat;
+
+    const actions = forcingActions(state, state.turn, opts);
+    if (actions.length === 0) return standPat;
+
+    const maximizing = state.turn === rootPlayer;
+    let value = maximizing ? -INF : INF;
+    for (const action of actions) {
+      const child = Engine.applyKnownLegalAction(state, action);
+      const score = quiescence(child, rootPlayer, alpha, beta, deadline, opts, bumpNode, depth - 1);
+      if (maximizing) {
+        value = Math.max(value, score);
+        alpha = Math.max(alpha, value);
+      } else {
+        value = Math.min(value, score);
+        beta = Math.min(beta, value);
+      }
+      if (alpha >= beta) break;
+    }
+    return value;
+  }
+
+  function forcingActions(state, player, opts) {
+    const winningMoves = Engine.legalPawnMoves(state, player).filter((move) => isGoalByName(Engine.seatsForMode(state.mode)[player].goal, move.to.r, move.to.c));
+    if (winningMoves.length > 0) return winningMoves;
+
+    const threats = immediateGoalThreatPlayers(state, player);
+    if (threats.length === 0 || state.wallsRemaining[player] <= 0) return [];
+
+    const walls = candidateWalls(state, player, Math.max(opts.wallLimit || 6, 8));
+    return walls.filter((wall) => {
+      const child = Engine.applyKnownLegalAction(state, wall);
+      return threats.every((threatPlayer) => !hasImmediateGoalMove(child, threatPlayer));
+    });
+  }
+
+  function immediateGoalThreatPlayers(state, player) {
+    const threats = [];
+    const count = Engine.playerCount(state);
+    for (let i = 0; i < count; i += 1) {
+      if (i !== player && hasImmediateGoalMove(state, i)) threats.push(i);
+    }
+    return threats;
+  }
+
+  function hasImmediateGoalMove(state, player) {
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    return Engine.legalPawnMoves(state, player).some((move) => isGoalByName(goal, move.to.r, move.to.c));
   }
 
   function searchOptionsForDepth(opts, depth) {
@@ -294,9 +354,14 @@
   function evaluate(state, rootPlayer) {
     if (state.winner !== null) return state.winner === rootPlayer ? 100000 : -100000;
 
+    const immediateWinner = immediateWinningPlayer(state);
+    if (immediateWinner !== null) return immediateWinner === rootPlayer ? 96000 : -96000;
+
     const count = Engine.playerCount(state);
     const rootDistance = safeDistance(shortestGoalDistance(state, rootPlayer));
+    const rootRacePlies = racePliesToGoal(state, rootPlayer, rootDistance);
     let nearestOpponent = 99;
+    let nearestOpponentRacePlies = 999;
     let sumOpponentDistance = 0;
     let opponentWalls = 0;
     let opponentProgress = 0;
@@ -306,6 +371,7 @@
       if (i === rootPlayer) continue;
       const distance = safeDistance(shortestGoalDistance(state, i));
       nearestOpponent = Math.min(nearestOpponent, distance);
+      nearestOpponentRacePlies = Math.min(nearestOpponentRacePlies, racePliesToGoal(state, i, distance));
       sumOpponentDistance += distance;
       opponentWalls += state.wallsRemaining[i];
       opponentProgress = Math.max(opponentProgress, Engine.goalDistanceProgress(state, i));
@@ -321,6 +387,7 @@
     let score = 0;
     score += (nearestOpponent - rootDistance) * 132;
     score += (averageOpponentDistance - rootDistance) * 42;
+    score += (nearestOpponentRacePlies - rootRacePlies) * (count === 2 ? 24 : 12);
     score += (state.wallsRemaining[rootPlayer] - averageOpponentWalls) * 13;
     score += (rootProgress - opponentProgress) * 8;
     score += (rootMobility - opponentMobility / opponentCount) * 4;
@@ -330,11 +397,32 @@
     if (rootDistance <= 2 && state.wallsRemaining[rootPlayer] === 0) score += 120;
     if (nearestOpponent <= 2 && state.wallsRemaining[rootPlayer] > 0) score -= 120;
 
+    if (count === 2 && state.wallsRemaining[rootPlayer] === 0 && averageOpponentWalls === 0) {
+      const raceDelta = nearestOpponentRacePlies - rootRacePlies;
+      score += raceDelta * 180;
+      if (raceDelta > 0) score += 650;
+      else if (raceDelta < 0) score -= 650;
+    }
+
+    if (state.wallsRemaining[rootPlayer] === 0 && nearestOpponentRacePlies <= rootRacePlies) score -= 180;
+    if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += 150;
+
     return score;
   }
 
   function safeDistance(distance) {
     return distance === Infinity ? 99 : distance;
+  }
+
+  function immediateWinningPlayer(state) {
+    return hasImmediateGoalMove(state, state.turn) ? state.turn : null;
+  }
+
+  function racePliesToGoal(state, player, distance) {
+    if (distance <= 0) return 0;
+    const count = Engine.playerCount(state);
+    const turnOffset = (player - state.turn + count) % count;
+    return turnOffset + (distance - 1) * count + 1;
   }
 
   function chooseOpeningBookMove(state, player, variant, randomAmount) {
