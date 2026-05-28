@@ -397,10 +397,49 @@
   }
 
   function actionAdjustment(state, action, rootPlayer) {
-    if (action.type !== "wall" || state.mode !== 2) return 0;
+    if (state.mode !== 2) return 0;
     const actor = action.player === undefined ? state.turn : action.player;
-    const quality = action.adjustment || 0;
+    const quality = action.type === "wall" ? action.adjustment || 0 : moveActionQuality(state, action, actor);
     return actor === rootPlayer ? quality : -quality;
+  }
+
+  function moveActionQuality(state, action, player) {
+    if (action.type !== "move" || state.moveNumber > 28) return 0;
+    const target = 1 - player;
+    const wallLead = state.wallsRemaining[player] - state.wallsRemaining[target];
+    if (wallLead < 0) return 0;
+
+    const beforeDistance = safeDistance(shortestGoalDistance(state, player));
+    const beforeOpponentDistance = safeDistance(shortestGoalDistance(state, target));
+    const tempoLead = beforeDistance + 1 <= beforeOpponentDistance;
+    const strongWallLead = wallLead >= 3 && beforeDistance <= beforeOpponentDistance + 1;
+    if (!tempoLead && !strongWallLead) return 0;
+
+    const beforeProgress = Engine.goalDistanceProgress(state, player);
+    const beforeCenter = centerControlScore(state, player);
+    const original = state.pawns[player];
+    let afterDistance = beforeDistance;
+    let afterProgress = beforeProgress;
+    let afterCenter = beforeCenter;
+
+    try {
+      state.pawns[player] = { r: action.to.r, c: action.to.c };
+      afterDistance = safeDistance(shortestGoalDistance(state, player));
+      afterProgress = Engine.goalDistanceProgress(state, player);
+      afterCenter = centerControlScore(state, player);
+    } finally {
+      state.pawns[player] = original;
+    }
+
+    let quality = 0;
+    if (tempoLead && wallLead <= 1 && afterProgress < beforeProgress) quality -= 240;
+    if (strongWallLead) {
+      quality += (afterCenter - beforeCenter) * 180;
+      if (afterDistance > beforeDistance) quality -= 220;
+      if (afterProgress < beforeProgress) quality -= 130;
+      if (afterCenter <= 2 && afterDistance >= beforeDistance) quality -= 80;
+    }
+    return quality;
   }
 
   function wallActionQualityFromPaths(state, wall, player, beforePaths, afterPaths) {
@@ -416,11 +455,16 @@
     let quality = targetDelta * 55 - selfDelta * 75;
 
     if (!anchored && targetDelta <= 1) quality -= 70;
-    if (targetDelta <= 1 && wallBlocksPawnForward(state, wall, target)) quality -= 150;
-    if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) quality += 80;
-    if (state.moveNumber <= 18) {
+    if (targetDelta <= 1 && wallBlocksPawnForward(state, wall, target)) {
       const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
       const pathLead = beforeTarget - beforeSelf;
+      quality -= pathLead >= 0 || pressure >= 2 ? 150 : 25;
+    }
+    if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) quality += 120;
+    const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
+    const pathLead = beforeTarget - beforeSelf;
+    if (pressure >= 3 && targetDelta <= 1 && !anchored && wallDistanceToPawn(state, wall, target) <= 2) quality -= 130;
+    if (state.moveNumber <= 18) {
       if (pressure >= 2 && pathLead >= 1 && targetDelta <= 2) quality -= 720;
       if (pressure >= 3 && pathLead >= 0 && targetDelta <= 1) quality -= 260;
       if (pressure >= 2 && beforeSelf >= beforeTarget - 1 && targetDelta <= 1) quality -= 150 + pressure * 70;
@@ -431,6 +475,19 @@
     if (selfDelta > 0 && targetDelta <= selfDelta) quality -= 80;
 
     return quality;
+  }
+
+  function wallDistanceToPawn(state, wall, player) {
+    const pawn = state.pawns[player];
+    let best = 99;
+    for (let dr = 0; dr <= 1; dr += 1) {
+      for (let dc = 0; dc <= 1; dc += 1) {
+        const r = wall.r + dr;
+        const c = wall.c + dc;
+        best = Math.min(best, Math.abs(pawn.r - r) + Math.abs(pawn.c - c));
+      }
+    }
+    return best;
   }
 
   function wallBlocksPawnForward(state, wall, player) {
@@ -513,6 +570,7 @@
     let opponentMobility = 0;
     let opponentImprovingMoves = 0;
     let opponentEqualMoves = 0;
+    let opponentCenter = 0;
 
     for (let i = 0; i < count; i += 1) {
       if (i === rootPlayer) continue;
@@ -526,15 +584,19 @@
       opponentMobility += opponentRouteChoicesForPlayer.total;
       opponentImprovingMoves += opponentRouteChoicesForPlayer.improving;
       opponentEqualMoves += opponentRouteChoicesForPlayer.equal;
+      opponentCenter += centerControlScore(state, i);
     }
 
     const opponentCount = count - 1;
     const averageOpponentDistance = sumOpponentDistance / opponentCount;
     const averageOpponentWalls = opponentWalls / opponentCount;
     const raceDelta = nearestOpponentRacePlies - rootRacePlies;
+    const wallLead = state.wallsRemaining[rootPlayer] - averageOpponentWalls;
     const wallPressureBalance = state.wallsRemaining[rootPlayer] * nearestOpponentRacePlies - averageOpponentWalls * rootRacePlies;
     const rootProgress = Engine.goalDistanceProgress(state, rootPlayer);
     const rootRouteChoices = pawnRouteChoices(state, rootPlayer, rootDistance);
+    const rootCenter = centerControlScore(state, rootPlayer);
+    const averageOpponentCenter = opponentCenter / opponentCount;
     const rootMobility = rootRouteChoices.total;
 
     let score = 0;
@@ -548,6 +610,11 @@
     score += (rootMobility - opponentMobility / opponentCount) * 4;
     score += (rootRouteChoices.improving - opponentImprovingMoves / opponentCount) * (count === 2 ? 36 : 16);
     score += (rootRouteChoices.equal - opponentEqualMoves / opponentCount) * (count === 2 ? 12 : 5);
+    score += (rootCenter - averageOpponentCenter) * (count === 2 ? 10 : 4);
+    if (count === 2 && state.moveNumber <= 24 && wallLead >= 3 && rootDistance <= nearestOpponent) {
+      score += rootRouteChoices.equal * 55 + rootCenter * 45;
+      if (rootRouteChoices.total <= 3) score -= 180;
+    }
     if (count === 2 && rootRouteChoices.improving === 0 && rootDistance > 1) score -= 120;
     if (count === 2 && opponentImprovingMoves === 0 && nearestOpponent > 1) score += 90;
 
@@ -566,6 +633,13 @@
     if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += 150;
 
     return score;
+  }
+
+  function centerControlScore(state, player) {
+    const pawn = state.pawns[player];
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    const axis = goal === "row0" || goal === "row8" ? pawn.c : pawn.r;
+    return Math.max(0, 4 - Math.abs(axis - 4));
   }
 
   function pawnRouteChoices(state, player, currentDistance) {
