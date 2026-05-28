@@ -61,7 +61,7 @@
       const child = Engine.applyKnownLegalAction(state, action);
       return {
         action,
-        score: evaluate(child, rootPlayer) - repetitionPenalty(child, rootPlayer, action, opts),
+        score: evaluate(child, rootPlayer) + actionAdjustment(state, action, rootPlayer) - repetitionPenalty(child, rootPlayer, action, opts),
         prior: action.prior || 0
       };
     });
@@ -83,6 +83,7 @@
           score = search(child, depth - 1, rootPlayer, -INF, INF, deadline, opts, table, () => {
             nodes += 1;
           });
+          score += actionAdjustment(state, entry.action, rootPlayer);
           score -= repetitionPenalty(child, rootPlayer, entry.action, opts);
         } catch (err) {
           if (err && err.timeout) {
@@ -145,7 +146,7 @@
     let exact = true;
     for (const action of actions) {
       const child = Engine.applyKnownLegalAction(state, action);
-      const score = search(child, depth - 1, rootPlayer, alpha, beta, deadline, opts, table, bumpNode);
+      const score = search(child, depth - 1, rootPlayer, alpha, beta, deadline, opts, table, bumpNode) + actionAdjustment(state, action, rootPlayer);
       if (maximizing) {
         value = Math.max(value, score);
         alpha = Math.max(alpha, value);
@@ -279,7 +280,7 @@
     return actions
       .map((action) => ({
         action,
-        score: evaluate(Engine.applyKnownLegalAction(state, action), rootPlayer),
+        score: evaluate(Engine.applyKnownLegalAction(state, action), rootPlayer) + actionAdjustment(state, action, rootPlayer),
         prior: action.prior || 0
       }))
       .sort((a, b) => {
@@ -395,6 +396,73 @@
     return penalty;
   }
 
+  function actionAdjustment(state, action, rootPlayer) {
+    if (action.type !== "wall" || state.mode !== 2) return 0;
+    const actor = action.player === undefined ? state.turn : action.player;
+    const quality = action.adjustment || 0;
+    return actor === rootPlayer ? quality : -quality;
+  }
+
+  function wallActionQualityFromPaths(state, wall, player, beforePaths, afterPaths) {
+    if (state.mode !== 2) return 0;
+    const target = 1 - player;
+    const beforeSelf = safeDistance(beforePaths[player].distance);
+    const afterSelf = safeDistance(afterPaths[player].distance);
+    const beforeTarget = safeDistance(beforePaths[target].distance);
+    const afterTarget = safeDistance(afterPaths[target].distance);
+    const targetDelta = Math.max(0, afterTarget - beforeTarget);
+    const selfDelta = Math.max(0, afterSelf - beforeSelf);
+    const anchored = wallTouchesEdge(wall) || wallTouchesExisting(state, wall);
+    let quality = targetDelta * 55 - selfDelta * 75;
+
+    if (!anchored && targetDelta <= 1) quality -= 70;
+    if (state.moveNumber <= 18) {
+      const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
+      if (pressure >= 2 && beforeSelf >= beforeTarget - 1 && targetDelta <= 1) quality -= 150 + pressure * 70;
+      if (pressure >= 2 && wallSupportsHomeEdge(state, wall, player)) quality += 45;
+    }
+    if (anchored && targetDelta >= 1) quality += 25;
+    if (targetDelta >= 2) quality += 80;
+    if (selfDelta > 0 && targetDelta <= selfDelta) quality -= 80;
+
+    return quality;
+  }
+
+  function wallSupportsHomeEdge(state, wall, player) {
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    if (wall.orientation === "h" && goal === "row0") return wall.r === Engine.WALL_SIZE - 1;
+    if (wall.orientation === "h" && goal === "row8") return wall.r === 0;
+    if (wall.orientation === "v" && goal === "col0") return wall.c === Engine.WALL_SIZE - 1;
+    if (wall.orientation === "v" && goal === "col8") return wall.c === 0;
+    return false;
+  }
+
+  function wallTouchesEdge(wall) {
+    if (wall.orientation === "h") return wall.c === 0 || wall.c === Engine.WALL_SIZE - 1;
+    return wall.r === 0 || wall.r === Engine.WALL_SIZE - 1;
+  }
+
+  function wallTouchesExisting(state, wall) {
+    const ownSet = wall.orientation === "h" ? state.hWalls : state.vWalls;
+    if (wall.orientation === "h") {
+      if (ownSet.has(wallKey(wall.r, wall.c - 1)) || ownSet.has(wallKey(wall.r, wall.c + 1))) return true;
+      return (
+        state.vWalls.has(wallKey(wall.r - 1, wall.c)) ||
+        state.vWalls.has(wallKey(wall.r, wall.c)) ||
+        state.vWalls.has(wallKey(wall.r - 1, wall.c + 1)) ||
+        state.vWalls.has(wallKey(wall.r, wall.c + 1))
+      );
+    }
+
+    if (ownSet.has(wallKey(wall.r - 1, wall.c)) || ownSet.has(wallKey(wall.r + 1, wall.c))) return true;
+    return (
+      state.hWalls.has(wallKey(wall.r, wall.c - 1)) ||
+      state.hWalls.has(wallKey(wall.r, wall.c)) ||
+      state.hWalls.has(wallKey(wall.r + 1, wall.c - 1)) ||
+      state.hWalls.has(wallKey(wall.r + 1, wall.c))
+    );
+  }
+
   function evaluate(state, rootPlayer) {
     if (state.winner !== null) return state.winner === rootPlayer ? 100000 : -100000;
 
@@ -487,6 +555,9 @@
     }
     if (legalCandidates.length > 0 && randomAmount > 0.005 && Math.random() < Math.min(0.5, randomAmount * 2.5)) {
       return legalCandidates[Math.floor(Math.random() * legalCandidates.length)];
+    }
+    if (state.wallsRemaining[player] === 10 && state.wallsRemaining[opponent] === 10 && legalCandidates.length > 0) {
+      return legalCandidates[0];
     }
     let best = null;
     let bestScore = -INF;
@@ -635,8 +706,9 @@
         }
       });
       if (!reachable) continue;
+      const adjustment = wallActionQualityFromPaths(state, wall, player, paths, afterPaths);
       const score = wallDeltaScoreFromPaths(state, wall, player, paths, afterPaths, pathWidths, afterWidths) + wall.reason;
-      scored.push(Object.assign(wall, { prior: score }));
+      scored.push(Object.assign(wall, { prior: score, adjustment }));
     }
 
     scored.sort((a, b) => b.prior - a.prior);

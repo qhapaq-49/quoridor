@@ -103,6 +103,7 @@ function testAiAvoidsSevereWallTrapAtLeaf() {
     rootPlayer: 0
   });
 
+  assert.strictEqual(result.bestMove.type, "move");
   assert.ok(!Engine.actionEquals(result.bestMove, fragileRun));
 }
 
