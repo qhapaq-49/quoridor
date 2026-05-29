@@ -39,7 +39,9 @@ function parseArgs(argv) {
     aEvalWeights: null,
     bEvalWeights: null,
     aBookVariant: null,
-    bBookVariant: null
+    bBookVariant: null,
+    aOpeningFollowup: true,
+    bOpeningFollowup: true
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -79,7 +81,9 @@ function parseArgs(argv) {
     else if (arg === "--a-eval-weights") args.aEvalWeights = parseJsonObject(next, arg), i += 1;
     else if (arg === "--b-eval-weights") args.bEvalWeights = parseJsonObject(next, arg), i += 1;
     else if (arg === "--a-book-variant") args.aBookVariant = Number(next), i += 1;
+    else if (arg === "--a-no-opening-followup") args.aOpeningFollowup = false;
     else if (arg === "--b-book-variant") args.bBookVariant = Number(next), i += 1;
+    else if (arg === "--b-no-opening-followup") args.bOpeningFollowup = false;
     else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -137,6 +141,8 @@ Options:
   --b-eval-weights JSON
   --a-book-variant N
   --b-book-variant N
+  --a-no-opening-followup
+  --b-no-opening-followup
 `);
 }
 
@@ -178,6 +184,7 @@ function optionsFor(args, side, rootPlayer, gameIndex) {
   const verifyRolloutWallLimit = args[prefix + "VerifyRolloutWallLimit"];
   const evalWeights = args[prefix + "EvalWeights"];
   const bookVariant = dynamicBookVariant(args, side, gameIndex);
+  const openingFollowup = args[prefix + "OpeningFollowup"];
   if (timeLimit !== null) options.timeLimit = timeLimit;
   if (maxDepth !== null) options.maxDepth = maxDepth;
   if (wallLimit !== null) options.wallLimit = wallLimit;
@@ -191,6 +198,7 @@ function optionsFor(args, side, rootPlayer, gameIndex) {
   if (verifyRolloutWallLimit !== null) options.verifyRolloutWallLimit = verifyRolloutWallLimit;
   if (evalWeights !== null) options.evalWeights = evalWeights;
   if (bookVariant !== null) options.bookVariant = bookVariant;
+  if (openingFollowup === false) options.openingFollowup = false;
   return options;
 }
 

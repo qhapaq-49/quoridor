@@ -78,7 +78,7 @@
     let completedDepth = 0;
     let nodes = 0;
 
-    const bookMove = chooseOpeningBookMove(state, rootPlayer, opts.bookVariant, randomAmount) || chooseOpeningFollowupMove(state, rootPlayer);
+    const bookMove = chooseOpeningBookMove(state, rootPlayer, opts.bookVariant, randomAmount) || (opts.openingFollowup === false ? null : chooseOpeningFollowupMove(state, rootPlayer));
     if (bookMove) {
       return {
         bestMove: bookMove,
