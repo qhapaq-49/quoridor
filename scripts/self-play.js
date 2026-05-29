@@ -9,6 +9,7 @@ function parseArgs(argv) {
     seed: 1,
     maxPlies: 220,
     quiet: false,
+    bookVariantCycle: null,
     aStrength: "strong",
     bStrength: "strong",
     aRandomness: 0,
@@ -48,6 +49,7 @@ function parseArgs(argv) {
     else if (arg === "--seed") args.seed = Number(next), i += 1;
     else if (arg === "--max-plies") args.maxPlies = Number(next), i += 1;
     else if (arg === "--quiet") args.quiet = true;
+    else if (arg === "--book-variant-cycle") args.bookVariantCycle = Number(next), i += 1;
     else if (arg === "--a-strength") args.aStrength = next, i += 1;
     else if (arg === "--b-strength") args.bStrength = next, i += 1;
     else if (arg === "--a-randomness") args.aRandomness = Number(next), i += 1;
@@ -104,6 +106,7 @@ Options:
   --seed N
   --max-plies N
   --quiet
+  --book-variant-cycle N
   --a-strength fast|balanced|strong
   --b-strength fast|balanced|strong
   --a-randomness X
@@ -145,7 +148,17 @@ function installDeterministicRandom(seed) {
   };
 }
 
-function optionsFor(args, side, rootPlayer) {
+function dynamicBookVariant(args, side, gameIndex) {
+  const prefix = side === "A" ? "a" : "b";
+  const fixed = args[prefix + "BookVariant"];
+  if (fixed !== null) return fixed;
+  if (!args.bookVariantCycle) return null;
+  const cycle = Math.max(1, Math.floor(args.bookVariantCycle));
+  if (side === "A") return gameIndex % cycle;
+  return Math.floor(gameIndex / cycle) % cycle;
+}
+
+function optionsFor(args, side, rootPlayer, gameIndex) {
   const prefix = side === "A" ? "a" : "b";
   const options = {
     strength: args[prefix + "Strength"],
@@ -164,7 +177,7 @@ function optionsFor(args, side, rootPlayer) {
   const verifyMaxPlies = args[prefix + "VerifyMaxPlies"];
   const verifyRolloutWallLimit = args[prefix + "VerifyRolloutWallLimit"];
   const evalWeights = args[prefix + "EvalWeights"];
-  const bookVariant = args[prefix + "BookVariant"];
+  const bookVariant = dynamicBookVariant(args, side, gameIndex);
   if (timeLimit !== null) options.timeLimit = timeLimit;
   if (maxDepth !== null) options.maxDepth = maxDepth;
   if (wallLimit !== null) options.wallLimit = wallLimit;
@@ -201,7 +214,7 @@ function playGame(args, gameIndex) {
   for (let ply = 0; ply < args.maxPlies && state.winner === null; ply += 1) {
     const side = state.turn === aPlayer ? "A" : "B";
     const t0 = Date.now();
-    const analyzeOptions = optionsFor(args, side, state.turn);
+    const analyzeOptions = optionsFor(args, side, state.turn, gameIndex);
     analyzeOptions.avoid = recentStates(history);
     analyzeOptions.avoidPawnKeys = recentPawnKeys(stateHistory, state.turn);
     const result = AI.analyze(state, analyzeOptions);
