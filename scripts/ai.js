@@ -31,6 +31,17 @@
     const deadline = started + opts.timeLimit;
     const rootPlayer = opts.rootPlayer === undefined ? state.turn : opts.rootPlayer;
     const randomAmount = Math.max(0, Math.min(1, opts.randomness === undefined ? 0.16 : opts.randomness));
+    const immediateWin = immediateWinningMove(state, state.turn);
+    if (immediateWin) {
+      return {
+        bestMove: immediateWin,
+        chosenMove: immediateWin,
+        candidates: [{ action: immediateWin, score: 100000, rank: 1 }],
+        depth: 0,
+        nodes: 0,
+        timeMs: Math.round(now() - started)
+      };
+    }
     const table = new Map();
     let completedDepth = 0;
     let nodes = 0;
@@ -267,8 +278,12 @@
   }
 
   function hasImmediateGoalMove(state, player) {
+    return immediateWinningMove(state, player) !== null;
+  }
+
+  function immediateWinningMove(state, player) {
     const goal = Engine.seatsForMode(state.mode)[player].goal;
-    return Engine.legalPawnMoves(state, player).some((move) => isGoalByName(goal, move.to.r, move.to.c));
+    return Engine.legalPawnMoves(state, player).find((move) => isGoalByName(goal, move.to.r, move.to.c)) || null;
   }
 
   function searchOptionsForDepth(opts, depth) {
@@ -524,6 +539,31 @@
     const selfDelta = Math.max(0, afterSelf - beforeSelf);
     const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
     const pathLead = beforeTarget - beforeSelf;
+    const afterPathLead = afterTarget - afterSelf;
+    const ownWallsAfter = state.wallsRemaining[player] - 1;
+    if (
+      state.moveNumber <= 24 &&
+      beforeSelf >= beforeTarget + 2 &&
+      afterSelf >= afterTarget + 2 &&
+      beforeTarget > 3 &&
+      selfDelta === 0 &&
+      targetDelta <= 4
+    ) {
+      return -360 - Math.min(5, afterSelf - afterTarget) * 110;
+    }
+    if (
+      state.moveNumber >= 18 &&
+      state.moveNumber <= 36 &&
+      beforeSelf >= beforeTarget + 1 &&
+      afterPathLead <= 1 &&
+      afterSelf >= 8 &&
+      afterTarget >= 8 &&
+      ownWallsAfter <= state.wallsRemaining[target] &&
+      selfDelta === 0 &&
+      targetDelta <= 1
+    ) {
+      return -420 - Math.min(4, state.wallsRemaining[target] - ownWallsAfter) * 120;
+    }
     if (state.moveNumber <= 18 && pressure >= 3 && pathLead < 0 && targetDelta >= 1 && selfDelta === 0 && wallDistanceToPawn(state, wall, player) <= 2) return 520;
     if (state.moveNumber >= 12 && state.moveNumber <= 22 && pressure <= 1 && pathLead < 0 && targetDelta <= 2 && selfDelta === 0) return -320;
     if (state.moveNumber >= 20 && state.moveNumber <= 30 && pressure <= -2 && pathLead <= -2 && state.wallsRemaining[player] <= 4 && targetDelta <= 2 && selfDelta === 0) return -380;

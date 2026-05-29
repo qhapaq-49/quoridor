@@ -416,6 +416,25 @@ function testAiBlocksNearGoalOnPrimaryFile() {
   assert.strictEqual(result.bestMove.c, 5);
 }
 
+function testAiTakesImmediateWin() {
+  const state = Engine.createState(2);
+  state.moveNumber = 70;
+  state.turn = 0;
+  state.pawns = [{ r: 1, c: 0 }, { r: 3, c: 3 }];
+  state.wallsRemaining = [1, 0];
+
+  const result = AI.analyze(state, {
+    timeLimit: 100000,
+    maxDepth: 4,
+    wallLimit: 6,
+    randomness: 0,
+    rootPlayer: 0
+  });
+
+  assert.strictEqual(result.bestMove.type, "move");
+  assert.deepStrictEqual(result.bestMove.to, { r: 0, c: 0 });
+}
+
 function testAiReturnsLegalMove() {
   const state = Engine.createState(2);
   const result = AI.analyze(state, {
@@ -445,6 +464,7 @@ testAiPrefersSecondStepGateInEvenRace();
 testAiCutsLocalRaceCorridorWhenBehind();
 testAiShortensLongEvenRaceInsteadOfWalling();
 testAiBlocksNearGoalOnPrimaryFile();
+testAiTakesImmediateWin();
 testAiReturnsLegalMove();
 
 console.log("engine tests passed");
