@@ -20,6 +20,7 @@ function parseArgs(argv) {
     strategy: "alphabeta",
     bookVariant: null,
     ourOpeningFollowup: true,
+    ourOpeningFollowupPrior: null,
     ourTimeLimit: null,
     ourMaxDepth: null,
     ourWallLimit: null,
@@ -52,6 +53,8 @@ function parseArgs(argv) {
     else if (arg === "--strategy") args.strategy = next, i += 1;
     else if (arg === "--book-variant") args.bookVariant = Number(next), i += 1;
     else if (arg === "--our-no-opening-followup") args.ourOpeningFollowup = false;
+    else if (arg === "--our-soft-opening-followup") args.ourOpeningFollowup = "soft";
+    else if (arg === "--our-opening-followup-prior") args.ourOpeningFollowupPrior = Number(next), i += 1;
     else if (arg === "--our-time-limit") args.ourTimeLimit = Number(next), i += 1;
     else if (arg === "--our-max-depth") args.ourMaxDepth = Number(next), i += 1;
     else if (arg === "--our-wall-limit") args.ourWallLimit = Number(next), i += 1;
@@ -101,6 +104,8 @@ Options:
   --strategy NAME        alphabeta | mcts
   --book-variant N       Force opening-book candidate index
   --our-no-opening-followup Disable our forced opening pawn follow-up
+  --our-soft-opening-followup Search with a strong opening pawn follow-up prior
+  --our-opening-followup-prior N Override soft opening follow-up prior
   --our-time-limit N     Override our AI time limit in ms
   --our-max-depth N      Override our AI max depth
   --our-wall-limit N     Override our AI wall candidate limit
@@ -196,7 +201,8 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
         rootPlayer: state.turn
       };
       if (opts.bookVariant !== null) analyzeOptions.bookVariant = opts.bookVariant;
-      if (opts.ourOpeningFollowup === false) analyzeOptions.openingFollowup = false;
+      if (opts.ourOpeningFollowup === false || opts.ourOpeningFollowup === "soft") analyzeOptions.openingFollowup = opts.ourOpeningFollowup;
+      if (opts.ourOpeningFollowupPrior !== null) analyzeOptions.openingFollowupPrior = opts.ourOpeningFollowupPrior;
       if (opts.ourTimeLimit !== null) analyzeOptions.timeLimit = opts.ourTimeLimit;
       if (opts.ourMaxDepth !== null) analyzeOptions.maxDepth = opts.ourMaxDepth;
       if (opts.ourWallLimit !== null) analyzeOptions.wallLimit = opts.ourWallLimit;

@@ -78,7 +78,7 @@
     let completedDepth = 0;
     let nodes = 0;
 
-    const bookMove = chooseOpeningBookMove(state, rootPlayer, opts.bookVariant, randomAmount) || (opts.openingFollowup === false ? null : chooseOpeningFollowupMove(state, rootPlayer));
+    const bookMove = chooseOpeningBookMove(state, rootPlayer, opts.bookVariant, randomAmount) || (opts.openingFollowup === false || opts.openingFollowup === "soft" ? null : chooseOpeningFollowupMove(state, rootPlayer));
     if (bookMove) {
       return {
         bestMove: bookMove,
@@ -1010,7 +1010,7 @@
   function candidateActions(state, player, options) {
     const opts = options || {};
     const moves = Engine.legalPawnMoves(state, player).map((move) => {
-      move.prior = movePrior(state, move, player);
+      move.prior = movePrior(state, move, player, opts);
       return move;
     });
 
@@ -1025,13 +1025,17 @@
     return moves.concat(walls).sort((a, b) => (b.prior || 0) - (a.prior || 0));
   }
 
-  function movePrior(state, move, player) {
+  function movePrior(state, move, player, opts) {
     const before = shortestGoalDistance(state, player);
     const child = Engine.applyKnownLegalAction(state, move);
     const after = shortestGoalDistance(child, player);
     let prior = (safeDistance(before) - safeDistance(after)) * 70;
     if (after <= 1) prior += 500;
     if (move.jump) prior += 18;
+    if (opts && opts.openingFollowup === "soft") {
+      const followup = chooseOpeningFollowupMove(state, player);
+      if (followup && followup.to.r === move.to.r && followup.to.c === move.to.c) prior += opts.openingFollowupPrior || 520;
+    }
     return prior;
   }
 

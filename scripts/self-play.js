@@ -41,7 +41,9 @@ function parseArgs(argv) {
     aBookVariant: null,
     bBookVariant: null,
     aOpeningFollowup: true,
-    bOpeningFollowup: true
+    bOpeningFollowup: true,
+    aOpeningFollowupPrior: null,
+    bOpeningFollowupPrior: null
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -82,8 +84,12 @@ function parseArgs(argv) {
     else if (arg === "--b-eval-weights") args.bEvalWeights = parseJsonObject(next, arg), i += 1;
     else if (arg === "--a-book-variant") args.aBookVariant = Number(next), i += 1;
     else if (arg === "--a-no-opening-followup") args.aOpeningFollowup = false;
+    else if (arg === "--a-soft-opening-followup") args.aOpeningFollowup = "soft";
+    else if (arg === "--a-opening-followup-prior") args.aOpeningFollowupPrior = Number(next), i += 1;
     else if (arg === "--b-book-variant") args.bBookVariant = Number(next), i += 1;
     else if (arg === "--b-no-opening-followup") args.bOpeningFollowup = false;
+    else if (arg === "--b-soft-opening-followup") args.bOpeningFollowup = "soft";
+    else if (arg === "--b-opening-followup-prior") args.bOpeningFollowupPrior = Number(next), i += 1;
     else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -143,6 +149,10 @@ Options:
   --b-book-variant N
   --a-no-opening-followup
   --b-no-opening-followup
+  --a-soft-opening-followup
+  --b-soft-opening-followup
+  --a-opening-followup-prior N
+  --b-opening-followup-prior N
 `);
 }
 
@@ -185,6 +195,7 @@ function optionsFor(args, side, rootPlayer, gameIndex) {
   const evalWeights = args[prefix + "EvalWeights"];
   const bookVariant = dynamicBookVariant(args, side, gameIndex);
   const openingFollowup = args[prefix + "OpeningFollowup"];
+  const openingFollowupPrior = args[prefix + "OpeningFollowupPrior"];
   if (timeLimit !== null) options.timeLimit = timeLimit;
   if (maxDepth !== null) options.maxDepth = maxDepth;
   if (wallLimit !== null) options.wallLimit = wallLimit;
@@ -198,7 +209,8 @@ function optionsFor(args, side, rootPlayer, gameIndex) {
   if (verifyRolloutWallLimit !== null) options.verifyRolloutWallLimit = verifyRolloutWallLimit;
   if (evalWeights !== null) options.evalWeights = evalWeights;
   if (bookVariant !== null) options.bookVariant = bookVariant;
-  if (openingFollowup === false) options.openingFollowup = false;
+  if (openingFollowup === false || openingFollowup === "soft") options.openingFollowup = openingFollowup;
+  if (openingFollowupPrior !== null) options.openingFollowupPrior = openingFollowupPrior;
   return options;
 }
 
