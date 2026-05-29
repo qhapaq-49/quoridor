@@ -33,6 +33,7 @@ function parseArgs(argv) {
     ourVerifyScale: null,
     ourVerifyMaxPlies: null,
     ourVerifyRolloutWallLimit: null,
+    ourEvalWeights: null,
     traceOurs: 0
   };
 
@@ -63,6 +64,7 @@ function parseArgs(argv) {
     else if (arg === "--our-verify-scale") args.ourVerifyScale = Number(next), i += 1;
     else if (arg === "--our-verify-max-plies") args.ourVerifyMaxPlies = Number(next), i += 1;
     else if (arg === "--our-verify-rollout-wall-limit") args.ourVerifyRolloutWallLimit = Number(next), i += 1;
+    else if (arg === "--our-eval-weights") args.ourEvalWeights = parseJsonObject(next, arg), i += 1;
     else if (arg === "--trace-ours") args.traceOurs = Number(next), i += 1;
     else if (arg === "--help") {
       printHelp();
@@ -72,6 +74,14 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function parseJsonObject(text, label) {
+  const value = JSON.parse(text);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(label + " must be a JSON object");
+  }
+  return value;
 }
 
 function printHelp() {
@@ -102,6 +112,7 @@ Options:
   --our-verify-scale N Rollout verification score scale
   --our-verify-max-plies N Rollout verification length
   --our-verify-rollout-wall-limit N Rollout verification wall count
+  --our-eval-weights JSON Override our evaluation weights
   --trace-ours N      Print top N of our candidates on each of our turns
 `);
 }
@@ -196,6 +207,7 @@ function playGame(GameClass, GorisansonAI, opts, gameIndex) {
       if (opts.ourVerifyScale !== null) analyzeOptions.verifyScale = opts.ourVerifyScale;
       if (opts.ourVerifyMaxPlies !== null) analyzeOptions.verifyMaxPlies = opts.ourVerifyMaxPlies;
       if (opts.ourVerifyRolloutWallLimit !== null) analyzeOptions.verifyRolloutWallLimit = opts.ourVerifyRolloutWallLimit;
+      if (opts.ourEvalWeights !== null) analyzeOptions.evalWeights = opts.ourEvalWeights;
       analyzeOptions.avoid = recentStateHashes(stateHistory);
       analyzeOptions.avoidPawnKeys = recentPawnKeys(stateHistory, state.turn);
       const engine = opts.strategy === "mcts" ? ExperimentalMcts : OurAI;

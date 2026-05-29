@@ -6,6 +6,38 @@
   const TACTICAL_WALL_PRIOR = 220;
   const PAWN_RACE_CACHE_LIMIT = 64;
   const pawnRaceCache = new Map();
+  const DEFAULT_EVAL_WEIGHTS = {
+    nearestDistance: 132,
+    averageDistance: 42,
+    raceDelta2p: 24,
+    raceDelta4p: 12,
+    wallPressure2p: 5,
+    wallPressure4p: 2,
+    winningRaceDrag2p: 10,
+    winningRaceDrag4p: 4,
+    wallLead: 13,
+    progress: 8,
+    mobility: 4,
+    improving2p: 36,
+    improving4p: 16,
+    equal2p: 12,
+    equal4p: 5,
+    center2p: 10,
+    center4p: 4,
+    wallLeadEqual: 55,
+    wallLeadCenter: 45,
+    crampedPenalty: 180,
+    noImprovingPenalty: 120,
+    opponentNoImprovingBonus: 90,
+    rootNearGoalBonus: 720,
+    opponentNearGoalPenalty: 880,
+    noWallNearGoalBonus: 120,
+    stopOpponentNearGoalPenalty: 120,
+    zeroWallRaceDelta: 180,
+    zeroWallRaceSwing: 650,
+    noWallRacePenalty: 180,
+    opponentNoWallRaceBonus: 150
+  };
 
   const PRESETS = {
     fast: { timeLimit: 450, maxDepth: 2, wallLimit: 6 },
@@ -51,7 +83,7 @@
       return {
         bestMove: bookMove,
         chosenMove: bookMove,
-        candidates: [{ action: bookMove, score: evaluate(Engine.applyKnownLegalAction(state, bookMove), rootPlayer), rank: 1 }],
+        candidates: [{ action: bookMove, score: evaluate(Engine.applyKnownLegalAction(state, bookMove), rootPlayer, opts), rank: 1 }],
         depth: 0,
         nodes: 0,
         timeMs: Math.round(now() - started)
@@ -74,7 +106,7 @@
       const child = Engine.applyKnownLegalAction(state, action);
       return {
         action,
-        score: evaluate(child, rootPlayer) + actionAdjustment(state, action, rootPlayer) - repetitionPenalty(child, rootPlayer, action, opts),
+        score: evaluate(child, rootPlayer, opts) + actionAdjustment(state, action, rootPlayer) - repetitionPenalty(child, rootPlayer, action, opts),
         prior: action.prior || 0
       };
     });
@@ -142,7 +174,7 @@
     }
     bumpNode();
 
-    if (state.winner !== null) return evaluate(state, rootPlayer);
+    if (state.winner !== null) return evaluate(state, rootPlayer, opts);
     if (depth <= 0) return quiescence(state, rootPlayer, alpha, beta, deadline, opts, bumpNode, opts.quiescenceDepth === undefined ? 1 : opts.quiescenceDepth);
 
     const hash = Engine.stateHash(state) + ":" + depth + ":" + rootPlayer;
@@ -151,9 +183,9 @@
 
     const maximizing = state.turn === rootPlayer;
     let actions = candidateActions(state, state.turn, searchOptionsForDepth(opts, depth));
-    if (actions.length === 0) return evaluate(state, rootPlayer);
+    if (actions.length === 0) return evaluate(state, rootPlayer, opts);
 
-    actions = orderActionsForRoot(state, actions, rootPlayer, maximizing, depth);
+    actions = orderActionsForRoot(state, actions, rootPlayer, maximizing, depth, opts);
 
     let value = maximizing ? -INF : INF;
     let exact = true;
@@ -185,7 +217,7 @@
     }
     bumpNode();
 
-    const standPat = evaluate(state, rootPlayer);
+    const standPat = evaluate(state, rootPlayer, opts);
     if (depth <= 0 || Math.abs(standPat) >= 90000) return standPat;
 
     const actions = forcingActions(state, state.turn, opts);
@@ -295,12 +327,12 @@
     return copy;
   }
 
-  function orderActionsForRoot(state, actions, rootPlayer, maximizing, depth) {
+  function orderActionsForRoot(state, actions, rootPlayer, maximizing, depth, opts) {
     void depth;
     return actions
       .map((action) => ({
         action,
-        score: evaluate(Engine.applyKnownLegalAction(state, action), rootPlayer) + actionAdjustment(state, action, rootPlayer),
+        score: evaluate(Engine.applyKnownLegalAction(state, action), rootPlayer, opts) + actionAdjustment(state, action, rootPlayer),
         prior: action.prior || 0
       }))
       .sort((a, b) => {
@@ -669,7 +701,13 @@
     );
   }
 
-  function evaluate(state, rootPlayer) {
+  function evalWeights(opts) {
+    if (!opts || !opts.evalWeights) return DEFAULT_EVAL_WEIGHTS;
+    if (!opts._evalWeights) opts._evalWeights = Object.assign({}, DEFAULT_EVAL_WEIGHTS, opts.evalWeights);
+    return opts._evalWeights;
+  }
+
+  function evaluate(state, rootPlayer, opts) {
     if (state.winner !== null) return state.winner === rootPlayer ? 100000 : -100000;
 
     const immediateWinner = immediateWinningPlayer(state);
@@ -717,39 +755,40 @@
     const rootCenter = centerControlScore(state, rootPlayer);
     const averageOpponentCenter = opponentCenter / opponentCount;
     const rootMobility = rootRouteChoices.total;
+    const weights = evalWeights(opts);
 
     let score = 0;
-    score += (nearestOpponent - rootDistance) * 132;
-    score += (averageOpponentDistance - rootDistance) * 42;
-    score += raceDelta * (count === 2 ? 24 : 12);
-    score += wallPressureBalance * (count === 2 ? 5 : 2);
-    if (raceDelta > 0) score -= rootRacePlies * (count === 2 ? 10 : 4);
-    score += (state.wallsRemaining[rootPlayer] - averageOpponentWalls) * 13;
-    score += (rootProgress - opponentProgress) * 8;
-    score += (rootMobility - opponentMobility / opponentCount) * 4;
-    score += (rootRouteChoices.improving - opponentImprovingMoves / opponentCount) * (count === 2 ? 36 : 16);
-    score += (rootRouteChoices.equal - opponentEqualMoves / opponentCount) * (count === 2 ? 12 : 5);
-    score += (rootCenter - averageOpponentCenter) * (count === 2 ? 10 : 4);
+    score += (nearestOpponent - rootDistance) * weights.nearestDistance;
+    score += (averageOpponentDistance - rootDistance) * weights.averageDistance;
+    score += raceDelta * (count === 2 ? weights.raceDelta2p : weights.raceDelta4p);
+    score += wallPressureBalance * (count === 2 ? weights.wallPressure2p : weights.wallPressure4p);
+    if (raceDelta > 0) score -= rootRacePlies * (count === 2 ? weights.winningRaceDrag2p : weights.winningRaceDrag4p);
+    score += (state.wallsRemaining[rootPlayer] - averageOpponentWalls) * weights.wallLead;
+    score += (rootProgress - opponentProgress) * weights.progress;
+    score += (rootMobility - opponentMobility / opponentCount) * weights.mobility;
+    score += (rootRouteChoices.improving - opponentImprovingMoves / opponentCount) * (count === 2 ? weights.improving2p : weights.improving4p);
+    score += (rootRouteChoices.equal - opponentEqualMoves / opponentCount) * (count === 2 ? weights.equal2p : weights.equal4p);
+    score += (rootCenter - averageOpponentCenter) * (count === 2 ? weights.center2p : weights.center4p);
     if (count === 2 && state.moveNumber <= 24 && wallLead >= 3 && rootDistance <= nearestOpponent) {
-      score += rootRouteChoices.equal * 55 + rootCenter * 45;
-      if (rootRouteChoices.total <= 3) score -= 180;
+      score += rootRouteChoices.equal * weights.wallLeadEqual + rootCenter * weights.wallLeadCenter;
+      if (rootRouteChoices.total <= 3) score -= weights.crampedPenalty;
     }
-    if (count === 2 && rootRouteChoices.improving === 0 && rootDistance > 1) score -= 120;
-    if (count === 2 && opponentImprovingMoves === 0 && nearestOpponent > 1) score += 90;
+    if (count === 2 && rootRouteChoices.improving === 0 && rootDistance > 1) score -= weights.noImprovingPenalty;
+    if (count === 2 && opponentImprovingMoves === 0 && nearestOpponent > 1) score += weights.opponentNoImprovingBonus;
 
-    if (rootDistance <= 1) score += 720;
-    if (nearestOpponent <= 1) score -= 880;
-    if (rootDistance <= 2 && state.wallsRemaining[rootPlayer] === 0) score += 120;
-    if (nearestOpponent <= 2 && state.wallsRemaining[rootPlayer] > 0) score -= 120;
+    if (rootDistance <= 1) score += weights.rootNearGoalBonus;
+    if (nearestOpponent <= 1) score -= weights.opponentNearGoalPenalty;
+    if (rootDistance <= 2 && state.wallsRemaining[rootPlayer] === 0) score += weights.noWallNearGoalBonus;
+    if (nearestOpponent <= 2 && state.wallsRemaining[rootPlayer] > 0) score -= weights.stopOpponentNearGoalPenalty;
 
     if (count === 2 && state.wallsRemaining[rootPlayer] === 0 && averageOpponentWalls === 0) {
-      score += raceDelta * 180;
-      if (raceDelta > 0) score += 650;
-      else if (raceDelta < 0) score -= 650;
+      score += raceDelta * weights.zeroWallRaceDelta;
+      if (raceDelta > 0) score += weights.zeroWallRaceSwing;
+      else if (raceDelta < 0) score -= weights.zeroWallRaceSwing;
     }
 
-    if (state.wallsRemaining[rootPlayer] === 0 && nearestOpponentRacePlies <= rootRacePlies) score -= 180;
-    if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += 150;
+    if (state.wallsRemaining[rootPlayer] === 0 && nearestOpponentRacePlies <= rootRacePlies) score -= weights.noWallRacePenalty;
+    if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += weights.opponentNoWallRaceBonus;
 
     return score;
   }
@@ -1255,6 +1294,7 @@
   const api = {
     analyze,
     evaluate,
+    DEFAULT_EVAL_WEIGHTS,
     candidateActions,
     candidateWalls,
     PRESETS

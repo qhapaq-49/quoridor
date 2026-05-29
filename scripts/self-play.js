@@ -35,6 +35,8 @@ function parseArgs(argv) {
     bVerifyMaxPlies: null,
     aVerifyRolloutWallLimit: null,
     bVerifyRolloutWallLimit: null,
+    aEvalWeights: null,
+    bEvalWeights: null,
     aBookVariant: null,
     bBookVariant: null
   };
@@ -72,6 +74,8 @@ function parseArgs(argv) {
     else if (arg === "--b-verify-max-plies") args.bVerifyMaxPlies = Number(next), i += 1;
     else if (arg === "--a-verify-rollout-wall-limit") args.aVerifyRolloutWallLimit = Number(next), i += 1;
     else if (arg === "--b-verify-rollout-wall-limit") args.bVerifyRolloutWallLimit = Number(next), i += 1;
+    else if (arg === "--a-eval-weights") args.aEvalWeights = parseJsonObject(next, arg), i += 1;
+    else if (arg === "--b-eval-weights") args.bEvalWeights = parseJsonObject(next, arg), i += 1;
     else if (arg === "--a-book-variant") args.aBookVariant = Number(next), i += 1;
     else if (arg === "--b-book-variant") args.bBookVariant = Number(next), i += 1;
     else if (arg === "--help") {
@@ -82,6 +86,14 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function parseJsonObject(text, label) {
+  const value = JSON.parse(text);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(label + " must be a JSON object");
+  }
+  return value;
 }
 
 function printHelp() {
@@ -118,6 +130,8 @@ Options:
   --b-verify-max-plies N
   --a-verify-rollout-wall-limit N
   --b-verify-rollout-wall-limit N
+  --a-eval-weights JSON
+  --b-eval-weights JSON
   --a-book-variant N
   --b-book-variant N
 `);
@@ -149,6 +163,7 @@ function optionsFor(args, side, rootPlayer) {
   const verifyScale = args[prefix + "VerifyScale"];
   const verifyMaxPlies = args[prefix + "VerifyMaxPlies"];
   const verifyRolloutWallLimit = args[prefix + "VerifyRolloutWallLimit"];
+  const evalWeights = args[prefix + "EvalWeights"];
   const bookVariant = args[prefix + "BookVariant"];
   if (timeLimit !== null) options.timeLimit = timeLimit;
   if (maxDepth !== null) options.maxDepth = maxDepth;
@@ -161,6 +176,7 @@ function optionsFor(args, side, rootPlayer) {
   if (verifyScale !== null) options.verifyScale = verifyScale;
   if (verifyMaxPlies !== null) options.verifyMaxPlies = verifyMaxPlies;
   if (verifyRolloutWallLimit !== null) options.verifyRolloutWallLimit = verifyRolloutWallLimit;
+  if (evalWeights !== null) options.evalWeights = evalWeights;
   if (bookVariant !== null) options.bookVariant = bookVariant;
   return options;
 }
