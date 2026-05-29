@@ -569,7 +569,7 @@
     if (state.moveNumber >= 20 && state.moveNumber <= 30 && pressure <= -2 && pathLead <= -2 && state.wallsRemaining[player] <= 4 && targetDelta <= 2 && selfDelta === 0) return -380;
     if (state.moveNumber >= 24 && state.moveNumber <= 32 && pressure <= -3 && state.wallsRemaining[player] <= 1 && pathLead <= 0 && targetDelta <= 2 && selfDelta === 0) return -300;
     if (state.moveNumber >= 30 && state.wallsRemaining[target] === 0 && state.wallsRemaining[player] <= 3 && pathLead < 0 && targetDelta <= 1 && selfDelta === 0) return -650;
-    if (state.moveNumber >= 24 && state.moveNumber <= 36 && pressure >= 3 && state.wallsRemaining[target] <= 2 && pathLead <= -2 && targetDelta >= 2 && selfDelta <= targetDelta && wallDistanceToPawn(state, wall, target) <= 3) return 320;
+    if (state.moveNumber >= 24 && state.moveNumber <= 36 && pressure >= 3 && state.wallsRemaining[target] <= 2 && pathLead <= -2 && afterPathLead >= 0 && targetDelta >= 2 && selfDelta <= targetDelta && wallDistanceToPawn(state, wall, target) <= 3) return 320;
     if (state.moveNumber >= 30 && state.wallsRemaining[target] === 0 && state.wallsRemaining[player] <= 2 && pathLead < 0 && targetDelta <= 2 && selfDelta === 0) return -360;
     return 0;
   }
