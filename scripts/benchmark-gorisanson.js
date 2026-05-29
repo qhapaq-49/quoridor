@@ -17,6 +17,7 @@ function parseArgs(argv) {
     ourRandomness: 0.08,
     maxPlies: 220,
     seed: 1,
+    quiet: false,
     strategy: "alphabeta",
     bookVariant: null,
     ourOpeningFollowup: true,
@@ -50,6 +51,7 @@ function parseArgs(argv) {
     else if (arg === "--our-randomness") args.ourRandomness = Number(next), i += 1;
     else if (arg === "--max-plies") args.maxPlies = Number(next), i += 1;
     else if (arg === "--seed") args.seed = Number(next), i += 1;
+    else if (arg === "--quiet") args.quiet = true;
     else if (arg === "--strategy") args.strategy = next, i += 1;
     else if (arg === "--book-variant") args.bookVariant = Number(next), i += 1;
     else if (arg === "--our-no-opening-followup") args.ourOpeningFollowup = false;
@@ -101,6 +103,7 @@ Options:
   --our-randomness X     0..1
   --max-plies N          Abort a game after N plies
   --seed N               Deterministic Math.random seed
+  --quiet                Suppress per-game output
   --strategy NAME        alphabeta | mcts
   --book-variant N       Force opening-book candidate index
   --our-no-opening-followup Disable our forced opening pawn follow-up
@@ -362,16 +365,18 @@ function main() {
   for (let i = 0; i < opts.games; i += 1) {
     const result = playGame(GameClass, GorisansonAI, opts, i);
     results.push(result);
-    console.log(JSON.stringify({
-      type: "game",
-      game: result.game,
-      ourPlayer: result.ourPlayer,
-      result: result.result,
-      winner: result.winner,
-      plies: result.plies,
-      durationMs: result.durationMs,
-      moves: result.moves
-    }));
+    if (!opts.quiet) {
+      console.log(JSON.stringify({
+        type: "game",
+        game: result.game,
+        ourPlayer: result.ourPlayer,
+        result: result.result,
+        winner: result.winner,
+        plies: result.plies,
+        durationMs: result.durationMs,
+        moves: result.moves
+      }));
+    }
   }
   console.log(JSON.stringify({ type: "summary", summary: summarize(results) }));
 }
