@@ -4,6 +4,8 @@
   const Engine = typeof require === "function" ? require("./engine.js") : root.QuoridorEngine;
   const INF = 1e9;
   const TACTICAL_WALL_PRIOR = 220;
+  const PAWN_RACE_CACHE_LIMIT = 64;
+  const pawnRaceCache = new Map();
 
   const PRESETS = {
     fast: { timeLimit: 450, maxDepth: 2, wallLimit: 6 },
@@ -179,7 +181,10 @@
     if (actions.length === 0) return standPat;
 
     const maximizing = state.turn === rootPlayer;
-    let value = maximizing ? -INF : INF;
+    let value = standPat;
+    if (maximizing) alpha = Math.max(alpha, value);
+    else beta = Math.min(beta, value);
+    if (alpha >= beta) return value;
     for (const action of actions) {
       const child = Engine.applyKnownLegalAction(state, action);
       const score = quiescence(child, rootPlayer, alpha, beta, deadline, opts, bumpNode, depth - 1);
@@ -405,7 +410,8 @@
   }
 
   function moveActionQuality(state, action, player) {
-    if (action.type !== "move" || state.moveNumber > 28) return 0;
+    if (action.type !== "move") return 0;
+    if (state.moveNumber > 28) return lateMoveActionQuality(state, action, player);
     const target = 1 - player;
     const wallLead = state.wallsRemaining[player] - state.wallsRemaining[target];
     if (wallLead < 0) return 0;
@@ -443,6 +449,29 @@
     return quality;
   }
 
+  function lateMoveActionQuality(state, action, player) {
+    if (state.mode !== 2) return 0;
+    const target = 1 - player;
+    if (state.wallsRemaining[target] !== 0 || state.wallsRemaining[player] > 2) return 0;
+
+    const beforeSelf = safeDistance(shortestGoalDistance(state, player));
+    const beforeTarget = safeDistance(shortestGoalDistance(state, target));
+    if (beforeSelf <= beforeTarget) return 0;
+
+    const original = state.pawns[player];
+    let afterSelf = beforeSelf;
+    try {
+      state.pawns[player] = { r: action.to.r, c: action.to.c };
+      afterSelf = safeDistance(shortestGoalDistance(state, player));
+    } finally {
+      state.pawns[player] = original;
+    }
+
+    if (afterSelf < beforeSelf) return 180;
+    if (afterSelf > beforeSelf) return -220;
+    return 0;
+  }
+
   function wallActionQualityFromPaths(state, wall, player, beforePaths, afterPaths) {
     if (state.mode !== 2) return 0;
     const target = 1 - player;
@@ -462,7 +491,10 @@
       if (beforeTarget <= 3 && pathLead < 0) quality += wallBlocksPawnPrimaryForward(state, wall, target) ? 195 : 155;
       else quality -= pathLead >= 0 || pressure >= 2 ? 150 : 25;
     }
-    if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) quality += 120;
+    if (targetDelta >= 1 && wallBlocksPawnSecondStep(state, wall, target)) {
+      quality += 120;
+      if (state.moveNumber <= 14) quality += centralWallBonus(wall);
+    }
     const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
     const pathLead = beforeTarget - beforeSelf;
     if (pressure >= 3 && pathLead < 0 && beforeSelf >= 12 && selfDelta === 0 && pathLead + targetDelta <= 0) quality -= 260;
@@ -493,7 +525,12 @@
     const pressure = state.wallsRemaining[player] - state.wallsRemaining[target];
     const pathLead = beforeTarget - beforeSelf;
     if (state.moveNumber <= 18 && pressure >= 3 && pathLead < 0 && targetDelta >= 1 && selfDelta === 0 && wallDistanceToPawn(state, wall, player) <= 2) return 520;
+    if (state.moveNumber >= 12 && state.moveNumber <= 22 && pressure <= 1 && pathLead < 0 && targetDelta <= 2 && selfDelta === 0) return -320;
     if (state.moveNumber >= 20 && state.moveNumber <= 30 && pressure <= -2 && pathLead <= -2 && state.wallsRemaining[player] <= 4 && targetDelta <= 2 && selfDelta === 0) return -380;
+    if (state.moveNumber >= 24 && state.moveNumber <= 32 && pressure <= -3 && state.wallsRemaining[player] <= 1 && pathLead <= 0 && targetDelta <= 2 && selfDelta === 0) return -300;
+    if (state.moveNumber >= 30 && state.wallsRemaining[target] === 0 && state.wallsRemaining[player] <= 3 && pathLead < 0 && targetDelta <= 1 && selfDelta === 0) return -650;
+    if (state.moveNumber >= 24 && state.moveNumber <= 36 && pressure >= 3 && state.wallsRemaining[target] <= 2 && pathLead <= -2 && targetDelta >= 2 && selfDelta <= targetDelta && wallDistanceToPawn(state, wall, target) <= 3) return 320;
+    if (state.moveNumber >= 30 && state.wallsRemaining[target] === 0 && state.wallsRemaining[player] <= 2 && pathLead < 0 && targetDelta <= 2 && selfDelta === 0) return -360;
     return 0;
   }
 
@@ -566,6 +603,11 @@
     return wall.r === 0 || wall.r === Engine.WALL_SIZE - 1;
   }
 
+  function centralWallBonus(wall) {
+    const center = wall.orientation === "h" ? wall.c + 0.5 : wall.r + 0.5;
+    return Math.max(0, 3 - Math.abs(center - 4)) * 25;
+  }
+
   function wallTouchesExisting(state, wall) {
     const ownSet = wall.orientation === "h" ? state.hWalls : state.vWalls;
     if (wall.orientation === "h") {
@@ -592,6 +634,9 @@
 
     const immediateWinner = immediateWinningPlayer(state);
     if (immediateWinner !== null) return immediateWinner === rootPlayer ? 96000 : -96000;
+
+    const exactPawnRaceScore = pawnRaceScore(state, rootPlayer);
+    if (exactPawnRaceScore !== null) return exactPawnRaceScore;
 
     const count = Engine.playerCount(state);
     const rootDistance = safeDistance(shortestGoalDistance(state, rootPlayer));
@@ -667,6 +712,112 @@
     if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += 150;
 
     return score;
+  }
+
+  function pawnRaceScore(state, rootPlayer) {
+    if (state.mode !== 2 || state.moveNumber < 44 || state.wallsRemaining[0] !== 0 || state.wallsRemaining[1] !== 0) return null;
+    const solver = pawnRaceSolverFor(state);
+    const p0 = state.pawns[0].r * Engine.SIZE + state.pawns[0].c;
+    const p1 = state.pawns[1].r * Engine.SIZE + state.pawns[1].c;
+    const index = pawnRaceIndex(p0, p1, state.turn);
+    const winner = solver.winner[index];
+    if (winner < 0) return null;
+    const plies = solver.depth[index];
+    if (winner === rootPlayer) return 86000 - plies * 12;
+    return -86000 + plies * 12;
+  }
+
+  function pawnRaceSolverFor(state) {
+    const key = pawnRaceWallKey(state);
+    const cached = pawnRaceCache.get(key);
+    if (cached) return cached;
+    const solver = createPawnRaceSolver(state);
+    if (pawnRaceCache.size >= PAWN_RACE_CACHE_LIMIT) pawnRaceCache.delete(pawnRaceCache.keys().next().value);
+    pawnRaceCache.set(key, solver);
+    return solver;
+  }
+
+  function pawnRaceWallKey(state) {
+    return Array.from(state.hWalls).sort().join(";") + "/" + Array.from(state.vWalls).sort().join(";");
+  }
+
+  function pawnRaceIndex(p0, p1, turn) {
+    return ((p0 * Engine.SIZE * Engine.SIZE + p1) * 2 + turn);
+  }
+
+  function createPawnRaceSolver(baseState) {
+    const cells = Engine.SIZE * Engine.SIZE;
+    const stateCount = cells * cells * 2;
+    const winner = new Int8Array(stateCount);
+    const depth = new Int16Array(stateCount);
+    const degree = new Int8Array(stateCount);
+    const maxLosingDepth = new Int16Array(stateCount);
+    winner.fill(-1);
+
+    const predecessors = Array.from({ length: stateCount }, () => []);
+    const queue = [];
+    const tmp = Engine.cloneState(baseState);
+    tmp.wallsRemaining = [0, 0];
+    tmp.winner = null;
+
+    for (let p0 = 0; p0 < cells; p0 += 1) {
+      for (let p1 = 0; p1 < cells; p1 += 1) {
+        if (p0 === p1) continue;
+        for (let turn = 0; turn < 2; turn += 1) {
+          const id = pawnRaceIndex(p0, p1, turn);
+          setPawnRacePawns(tmp, p0, p1);
+          tmp.turn = turn;
+          if (tmp.pawns[0].r === 0) {
+            winner[id] = 0;
+            queue.push(id);
+            continue;
+          }
+          if (tmp.pawns[1].r === Engine.SIZE - 1) {
+            winner[id] = 1;
+            queue.push(id);
+            continue;
+          }
+
+          const moves = Engine.legalPawnMoves(tmp, turn);
+          degree[id] = moves.length;
+          for (const move of moves) {
+            const nextP0 = turn === 0 ? move.to.r * Engine.SIZE + move.to.c : p0;
+            const nextP1 = turn === 1 ? move.to.r * Engine.SIZE + move.to.c : p1;
+            predecessors[pawnRaceIndex(nextP0, nextP1, 1 - turn)].push(id);
+          }
+        }
+      }
+    }
+
+    for (let head = 0; head < queue.length; head += 1) {
+      const child = queue[head];
+      const childWinner = winner[child];
+      const childDepth = depth[child];
+      for (const parent of predecessors[child]) {
+        if (winner[parent] >= 0) continue;
+        const turn = parent & 1;
+        if (childWinner === turn) {
+          winner[parent] = turn;
+          depth[parent] = childDepth + 1;
+          queue.push(parent);
+        } else {
+          maxLosingDepth[parent] = Math.max(maxLosingDepth[parent], childDepth + 1);
+          degree[parent] -= 1;
+          if (degree[parent] === 0) {
+            winner[parent] = 1 - turn;
+            depth[parent] = maxLosingDepth[parent];
+            queue.push(parent);
+          }
+        }
+      }
+    }
+
+    return { winner, depth };
+  }
+
+  function setPawnRacePawns(state, p0, p1) {
+    state.pawns[0] = { r: (p0 / Engine.SIZE) | 0, c: p0 % Engine.SIZE };
+    state.pawns[1] = { r: (p1 / Engine.SIZE) | 0, c: p1 % Engine.SIZE };
   }
 
   function centerControlScore(state, player) {
