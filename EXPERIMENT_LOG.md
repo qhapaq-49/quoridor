@@ -1,0 +1,179 @@
+# Quoridor AI Experiment Log
+
+This file keeps the tuning history readable after the fact. Benchmarks are small-sample regression checks, not rating claims.
+
+## Baseline Before This Log
+
+Commit `6827078 Account for opponent wall race pressure` is the current stable baseline.
+
+- Added conditional widening of root wall candidates when we have a large wall lead and the opponent is close enough to need stronger blocking.
+- Added a penalty for spending all walls while the opponent still has walls and the race lead is not large enough.
+- Known checks at that point:
+  - gori 2,500 seed 300: 2-0.
+  - gori 7,500 seeds 301/520/700/900: 6-2 total.
+  - gori 20,000 seeds 132/500/740: 4-2 total, breakdown 2-0, 1-1, 1-1.
+  - gori 60,000 seed 123: 1-0.
+  - Self-play versus previous version: 11-5.
+
+## 2026-05-30 Continued Tuning
+
+### Exact Pawn Race Earlier
+
+Idea: once both players have no walls, use the exact pawn-race solver immediately instead of waiting until move 44.
+
+Results:
+
+- No move threshold: gori 20,000 seeds 132/500/740 stayed 4-2, and self-play versus `HEAD` was 8-8.
+- However, artificial tests with very early wall exhaustion became much slower.
+- Threshold `moveNumber >= 36`: tests returned to acceptable time, but gori 20,000 seeds 132/500/740 fell to 3-3.
+
+Decision: rejected for now. The idea is correct for real endgames, but the current implementation needs a cheaper trigger or cache strategy before it is safe as default.
+
+### Route Width Static Evaluation
+
+Idea: reward having more edges on our shortest-path DAG than the opponent, because robust routes should be harder to block.
+
+Implementation tried:
+
+- Added `routeWidth2p` / `routeWidth4p`.
+- Evaluated `shortestPathEdgeInfo(...).edges.length` for root and opponents.
+
+Results:
+
+- gori 20,000 seed 740 improved to 2-0.
+- gori 20,000 seed 132 collapsed to 0-2.
+- seed 500 stayed 1-1.
+
+Decision: rejected. The feature overvalued wide-looking routes in positions where the concrete race or wall economy mattered more.
+
+### Gori-Style No-Wall Endgame Branch Restriction
+
+Idea copied from gorisanson/quoridor-ai: when the opponent has no walls, restrict our pawn moves to shortest-path progress and keep only walls that actually extend the opponent route.
+
+Results:
+
+- Self-play versus `HEAD`: 8-8.
+- gori 20,000 seed 132: 1-1.
+- gori 20,000 seed 740: 0-2.
+
+Decision: rejected. This heuristic is good for gori's MCTS branching factor, but it hurt our alpha-beta move selection.
+
+### Weight Sweeps Around Wall Economy And Route Choice
+
+Tried several static-eval weight bundles:
+
+- Higher `wallPressure2p`, `wallLead`, `opponentWallRaceBuffer`.
+- Higher race/distance terms.
+- Higher no-wall race penalties.
+- Higher `opponentNoImprovingBonus`, `noImprovingPenalty`, `crampedPenalty`.
+- Higher center and wall-lead route terms.
+
+Results:
+
+- Most bundles lost self-play directly.
+- The route-cramping bundle reached self-play 10-6 once, but then lost to gori checks: seed 132 became 1-1 and seed 500 became 0-2.
+- Strong wall-value bundle was self-play 5-11 and seed 132 only 1-1.
+
+Decision: rejected. The current evaluator is already near a fragile balance; broad static weight shifts tend to break known gori wins.
+
+### Rollout Verification Of Top Alpha-Beta Moves
+
+Idea: after alpha-beta ranks the top moves, run short randomized rollouts to detect walls that look good statically but lose long-term.
+
+Results:
+
+- Self-play: 7-9.
+- gori 20,000 seed 500: 1-1.
+- gori 20,000 seed 132: 0-2.
+
+Decision: rejected. The rollout policy is too noisy and misranks known-good tactical choices.
+
+### Midgame Wall-Deficit Penalty
+
+Observed losing pattern: in seed 500, the AI spent walls while already far behind in wall count, producing only a modest path lead and then losing the pawn race.
+
+Tried targeted root wall penalty:
+
+- Only after the move would leave us down at least three walls.
+- Only in midgame.
+- Only when the resulting path lead was not enough to justify the wall deficit.
+
+Results:
+
+- The targeted losing position changed from a wall to a pawn move.
+- Self-play: 9-7.
+- gori 20,000 seed 132: 1-1.
+- gori 20,000 seed 500: 1-1.
+
+Decision: rejected. It fixed the local symptom, but gave back an existing win and did not improve total gori score.
+
+### Opening Book Variants
+
+Tried forcing the existing opening wall variants instead of the default first legal candidate.
+
+Results on gori 20,000 seed 500:
+
+- Variant 1: 0-2.
+- Variant 2: 0-2.
+- Variant 3: 1-1.
+
+Follow-up for variant 3:
+
+- seed 132: 1-1.
+- seed 740: 1-1.
+
+Decision: rejected. Variant 3 was not bad, but it did not beat the default known set.
+
+### Experimental MCTS Engine
+
+Rechecked the separate `scripts/experimental-mcts.js` engine.
+
+Results:
+
+- gori 7,500 seed 301: 0-2.
+- gori 20,000 seed 500: 0-2.
+
+Decision: rejected as the main engine. Our alpha-beta remains much stronger.
+
+### Shallow Wall Candidate Limit
+
+Idea: reduce wall candidates near the leaves so the fixed time limit reaches more complete depth and avoids noisy partial depth-4 searches.
+
+Results:
+
+- `shallowWallLimit=4`: gori 20,000 seeds 500/132/740 were 2-0, 1-1, 1-1; self-play 9-7.
+- `replyWallLimit=5, shallowWallLimit=4`: seed 500 fell to 1-1; seed 132 stayed 1-1; self-play 9-7.
+- `shallowWallLimit=3`: initially looked strong at 2-0, 2-0, 1-1, but preset and single reruns were unstable, including seed 500 falling to 0-2 or 1-1.
+
+Decision: rejected for now. This may still be useful, but time-limit instability makes the apparent gain unreliable.
+
+### Max Depth 3
+
+Idea: a complete shallower search might beat partial depth 4.
+
+Results:
+
+- gori 20,000 seed 740: 0-2.
+- seed 132: 1-1.
+
+Decision: rejected. Depth 4 remains necessary despite partial completion.
+
+### Quiescence Action Adjustment
+
+Idea: regular search adds `actionAdjustment`, but quiescence did not. Tried applying it there too for consistency.
+
+Results:
+
+- `npm run check` and `npm test` passed.
+- gori 20,000 seed 132: 1-1.
+- gori 20,000 seed 500: 0-2.
+
+Decision: rejected. The adjustment terms are tuned for normal search nodes and overbias quiescence tactical lines.
+
+## Lessons So Far
+
+- Local tactical fixes often repair one visible loss and break a previous win. gori seeds 132/500/740 should stay in the minimum regression set.
+- Small self-play leads such as 9-7 or 10-6 are not enough when gori checks regress.
+- Time-limit alpha-beta results can be unstable under system load. Promising changes need single-process reruns before adoption.
+- gorisanson's heuristics are useful as ideas, but MCTS branching heuristics do not transfer directly to our alpha-beta evaluator.
+- The strongest next direction is probably a more principled evaluation feature or a faster deterministic search, not more scalar weight nudging.

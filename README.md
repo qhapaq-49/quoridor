@@ -36,6 +36,8 @@ node scripts/benchmark-gorisanson.js --games 4 --rollouts 2500 --our-strength st
 
 同一Node環境での少数局ベンチです。サンプル数はまだ小さいため、レート推定ではなく退行検知用です。gori 2.5k・7.5kには複数seedで勝てる局面が増えていますが、20k・60k相手の安定勝ち越しはまだ測定不足です。
 
+採用・不採用を含む実験履歴は [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) に残しています。
+
 - 2026-05-30 / `--our-time-limit 950 --our-max-depth 4 --our-randomness 0`
 - gori 2,500 rollouts seed 300: 2-0、平均こちら508.1ms/手、gori 321.0ms/手。
 - gori 7,500 rollouts seeds 301/520/700/900: 合計6-2。内訳は1-1, 2-0, 1-1, 2-0。
