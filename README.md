@@ -32,6 +32,12 @@ gorisanson/quoridor-aiを/tmpに展開した状態なら、自動対戦も走ら
 node scripts/benchmark-gorisanson.js --games 4 --rollouts 2500 --our-strength strong --our-randomness 0
 ```
 
+複数seedをまとめて回す場合はバッチランナーを使います。JSONLで保存すると、あとで同じ条件を読み返せます。
+
+```bash
+node scripts/batch-gorisanson.js --seeds 132,500,740 --games-per-seed 2 --rollouts 20000 --our-randomness 0 --our-time-limit 950 --our-max-depth 4 --quiet --out benchmarks/gori20k.jsonl
+```
+
 ## 現在のベンチと開発状況
 
 同一Node環境での少数局ベンチです。サンプル数はまだ小さいため、レート推定ではなく退行検知用です。gori 2.5k・7.5kには複数seedで勝てる局面が増えていますが、20k・60k相手の安定勝ち越しはまだ測定不足です。

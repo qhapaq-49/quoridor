@@ -170,6 +170,19 @@ Results:
 
 Decision: rejected. The adjustment terms are tuned for normal search nodes and overbias quiescence tactical lines.
 
+### Batch Gori Measurement Harness
+
+Problem: several late-stage tuning attempts looked good on one or two seeds, then regressed on another known seed or on rerun. The old one-command benchmark made larger checks cumbersome.
+
+Change:
+
+- Added `scripts/batch-gorisanson.js`.
+- It runs `scripts/benchmark-gorisanson.js` over a seed list or seed range.
+- It prints per-seed JSON summaries and an aggregate summary.
+- It can append JSONL logs with `--out`, so exact benchmark conditions and results can be revisited later.
+
+Decision: adopted. This is measurement infrastructure, not a playing-strength change.
+
 ## Lessons So Far
 
 - Local tactical fixes often repair one visible loss and break a previous win. gori seeds 132/500/740 should stay in the minimum regression set.

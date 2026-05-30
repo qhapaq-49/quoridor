@@ -5,6 +5,6 @@
   "description": "Static Quoridor game with browser-side AI for GitHub Pages.",
   "scripts": {
     "test": "node tests/test-engine.js",
-    "check": "node --check scripts/engine.js && node --check scripts/ai.js && node --check scripts/experimental-mcts.js && node --check scripts/benchmark-gorisanson.js && node --check scripts/self-play.js && node --check scripts/app.js && node --check tests/test-engine.js"
+    "check": "node --check scripts/engine.js && node --check scripts/ai.js && node --check scripts/experimental-mcts.js && node --check scripts/benchmark-gorisanson.js && node --check scripts/batch-gorisanson.js && node --check scripts/self-play.js && node --check scripts/app.js && node --check tests/test-engine.js"
   }
 }
