@@ -36,6 +36,7 @@
     zeroWallRaceDelta: 180,
     zeroWallRaceSwing: 650,
     noWallRacePenalty: 180,
+    opponentWallRaceBuffer: 95,
     opponentNoWallRaceBonus: 150
   };
 
@@ -789,6 +790,10 @@
     }
 
     if (state.wallsRemaining[rootPlayer] === 0 && nearestOpponentRacePlies <= rootRacePlies) score -= weights.noWallRacePenalty;
+    if (count === 2 && state.wallsRemaining[rootPlayer] === 0 && averageOpponentWalls > 0) {
+      const requiredLead = averageOpponentWalls * 4;
+      score -= Math.max(0, requiredLead - raceDelta) * weights.opponentWallRaceBuffer;
+    }
     if (averageOpponentWalls === 0 && rootRacePlies < nearestOpponentRacePlies) score += weights.opponentNoWallRaceBonus;
 
     return score;
@@ -1017,13 +1022,25 @@
 
     let walls = [];
     if (state.wallsRemaining[player] > 0) {
-      walls = candidateWalls(state, player, opts.wallLimit || 14).map((wall) => {
+      walls = candidateWalls(state, player, candidateWallLimit(state, player, opts)).map((wall) => {
         wall.prior = wall.prior || 0;
         return wall;
       });
     }
 
     return moves.concat(walls).sort((a, b) => (b.prior || 0) - (a.prior || 0));
+  }
+
+  function candidateWallLimit(state, player, opts) {
+    const base = opts.wallLimit || 14;
+    if (state.mode !== 2 || base >= 8) return base;
+    const target = 1 - player;
+    const wallLead = state.wallsRemaining[player] - state.wallsRemaining[target];
+    if (wallLead < 3 || state.wallsRemaining[player] < 5) return base;
+    const targetDistance = safeDistance(shortestGoalDistance(state, target));
+    const selfDistance = safeDistance(shortestGoalDistance(state, player));
+    if (targetDistance <= 5 && selfDistance <= targetDistance + 2) return 8;
+    return base;
   }
 
   function movePrior(state, move, player, opts) {

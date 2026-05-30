@@ -36,13 +36,13 @@ node scripts/benchmark-gorisanson.js --games 4 --rollouts 2500 --our-strength st
 
 同一Node環境での少数局ベンチです。サンプル数はまだ小さいため、レート推定ではなく退行検知用です。gori 2.5k・7.5kには複数seedで勝てる局面が増えていますが、20k・60k相手の安定勝ち越しはまだ測定不足です。
 
-- 2026-05-29 / `--our-time-limit 950 --our-max-depth 4 --our-randomness 0`
+- 2026-05-30 / `--our-time-limit 950 --our-max-depth 4 --our-randomness 0`
 - gori 2,500 rollouts seed 300: 2-0、平均こちら508.1ms/手、gori 321.0ms/手。
 - gori 7,500 rollouts seeds 301/520/700/900: 合計6-2。内訳は1-1, 2-0, 1-1, 2-0。
-- gori 20,000 rollouts seeds 132/500/740: 合計4-2。内訳は2-0, 1-1, 1-1。薄い中盤壁を抑える調整前は同seed集合で2-4。
-- gori 60,000 rollouts seed 123: 1-0、平均こちら342.6ms/手、gori 5639.7ms/手。
-- 既知の課題: 20k・60kはまだseed数が少ないため、勝ち越し主張には追加seedが必要です。7.5k seed 301の後手番は退行検知対象として残っています。
-- 自己対局: `scripts/self-play.js` でA/B比較を実行可能。履歴回避、序盤本の非対称、alpha-betaキャッシュの不正確さを検出して修正しました。
+- gori 20,000 rollouts seeds 132/500/740: 合計4-2。内訳は2-0, 1-1, 1-1。条件付き壁候補拡大と相手壁残りのレース評価後も同seed集合で維持。
+- gori 60,000 rollouts seed 123: 1-0、平均こちら371.1ms/手、gori 8087.8ms/手。
+- 自己対局: 現行候補は直前版相手の開幕バリアントペア16局で11-5、平均こちら約554ms/手。`scripts/self-play.js` でA/B比較を実行可能。
+- 既知の課題: 20k・60kはまだseed数が少ないため、勝ち越し主張には追加seedが必要です。7.5k seed 301の後手番と20k seed 740の後手番は退行検知対象として残っています。
 - 実験用MCTS: gori 1,000には勝てる局面がある一方、gori 2,500には不安定だったため現時点では不採用です。
 
 静的ファイルだけなので、`index.html` を開けば遊べます。ローカルサーバーで確認する場合は任意の静的サーバーを使ってください。
