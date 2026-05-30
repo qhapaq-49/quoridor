@@ -239,6 +239,30 @@ Result:
 
 Decision: rejected for now. It is more plausible than the broad race-behind condition, but it did not produce measurable strength gain.
 
+### Larger Gori 2,500 Follow-Up Batch
+
+Ran an additional gori 2,500 batch on seeds 1008..1015 after the early forward-wall trap change.
+
+Results:
+
+- Additional seeds 1008..1015, 16 games: 11-5, win rate 68.75%.
+- Combined with the prior 1000..1007 batch: 25-7 over 32 games, win rate 78.125%.
+- Average on the additional batch: ours 492.8ms/move, gori 523.2ms/move.
+- Loss-focused record rerun on seeds 1008/1010/1011/1013/1014: 6-4. seed1014 flipped from 1-1 to 2-0, confirming timing instability again.
+
+Decision: measurement only. The larger sample is less flattering than the first 16 games and gives better loss material.
+
+### Opening Variant And Follow-Up Checks On New Loss Seeds
+
+Tried opening changes on the new gori 2,500 loss-focused seeds 1008/1010/1011/1013/1014.
+
+Results:
+
+- `--book-variant 3`: 7-3. Better than the default record rerun, and it fixed seed1011, but earlier gori 20,000 checks for variant 3 were worse than default.
+- `--our-soft-opening-followup`: 8-2 on the same 2,500 loss seeds, but immediately collapsed to 0-2 on gori 20,000 seed132. The remaining 20,000 seeds were stopped after that failure.
+
+Decision: rejected. These opening tweaks help the new 2,500 loss cluster but do not survive the stronger known regression set.
+
 ## Lessons So Far
 
 - Local tactical fixes often repair one visible loss and break a previous win. gori seeds 132/500/740 should stay in the minimum regression set.

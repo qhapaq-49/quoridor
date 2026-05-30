@@ -1,0 +1,2 @@
+{"type":"config","seeds":[132,500,740],"gamesPerSeed":2,"recordGames":false,"passThrough":["--rollouts","20000","--our-randomness","0","--our-time-limit","950","--our-max-depth","4","--our-soft-opening-followup","--quiet"],"startedAt":"2026-05-30T22:49:01.451Z"}
+{"type":"seed","seed":132,"durationMs":324752,"summary":{"games":2,"wins":0,"losses":2,"draws":0,"winRate":0,"lightWins":0,"darkWins":0,"avgPlies":69.5,"avgOurThinkMs":416.125,"avgGorisansonThinkMs":4573.3426724137935,"avgOurDepth":3.3331896551724136,"avgOurNodes":538.626724137931}}
