@@ -8,6 +8,7 @@ function parseArgs(argv) {
   const args = {
     moves: null,
     file: null,
+    seed: null,
     game: 1,
     tracePlayer: null,
     traceTop: 5,
@@ -22,6 +23,7 @@ function parseArgs(argv) {
     const next = argv[i + 1];
     if (arg === "--moves") args.moves = next, i += 1;
     else if (arg === "--file") args.file = next, i += 1;
+    else if (arg === "--seed") args.seed = Number(next), i += 1;
     else if (arg === "--game") args.game = Number(next), i += 1;
     else if (arg === "--trace-player") args.tracePlayer = Number(next), i += 1;
     else if (arg === "--trace-top") args.traceTop = Number(next), i += 1;
@@ -46,6 +48,7 @@ function printHelp() {
 
 Options:
   --file PATH          Read moves from a JSONL benchmark log
+  --seed N            Seed record to read when using --file
   --game N            Game number when using --file, default 1
   --trace-player N    Only trace one player, default all players
   --trace-top N       Candidate count, default 5
@@ -56,15 +59,16 @@ Options:
 `);
 }
 
-function movesFromFile(file, gameNumber) {
+function movesFromFile(file, gameNumber, seed) {
   const lines = fs.readFileSync(file, "utf8").split(/\n+/).filter(Boolean);
   for (const line of lines) {
     const record = JSON.parse(line);
     if (record.type !== "seed" || !record.games) continue;
+    if (seed !== null && record.seed !== seed) continue;
     const game = record.games.find((item) => item.game === gameNumber);
     if (game) return game.moves.join(" ");
   }
-  throw new Error("No recorded game " + gameNumber + " in " + file);
+  throw new Error("No recorded game " + gameNumber + (seed === null ? "" : " for seed " + seed) + " in " + file);
 }
 
 function parseMove(text, player) {
@@ -115,7 +119,7 @@ function recentPawnKeys(history, player) {
 
 function main() {
   const args = parseArgs(process.argv);
-  const moveText = args.moves || movesFromFile(args.file, args.game);
+  const moveText = args.moves || movesFromFile(args.file, args.game, args.seed);
   const moves = moveText.trim().split(/\s+/).filter(Boolean);
   let state = Engine.createState(2);
   const history = [state];

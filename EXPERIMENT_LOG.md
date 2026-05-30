@@ -228,6 +228,17 @@ Result:
 
 Decision: rejected. The local symptom was real, but the broader condition broke other play.
 
+### Rejected Early Jump Trap Extension
+
+Idea: narrow the rejected race-behind trap condition to only early pawn jumps that can immediately be front-walled. This fixed the seed 500 shallow replay without touching ordinary behind-race moves.
+
+Result:
+
+- Local seed 500 and seed 740 replays changed the shallow `g5` jump to `e4`.
+- gori 20,000 seed 500 rerun was only 1-1, matching the adopted version rather than improving it.
+
+Decision: rejected for now. It is more plausible than the broad race-behind condition, but it did not produce measurable strength gain.
+
 ## Lessons So Far
 
 - Local tactical fixes often repair one visible loss and break a previous win. gori seeds 132/500/740 should stay in the minimum regression set.
