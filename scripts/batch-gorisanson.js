@@ -11,6 +11,7 @@ function parseArgs(argv) {
     seedCount: 0,
     gamesPerSeed: 2,
     out: null,
+    recordGames: false,
     passThrough: []
   };
 
@@ -32,6 +33,8 @@ function parseArgs(argv) {
     } else if (arg === "--out") {
       args.out = next;
       i += 1;
+    } else if (arg === "--record-games") {
+      args.recordGames = true;
     } else if (arg === "--help") {
       printHelp();
       process.exit(0);
@@ -80,6 +83,7 @@ Batch options:
   --seed-count N        Number of consecutive seeds
   --games-per-seed N    Games per seed, default 2
   --out PATH            Write JSONL log to PATH
+  --record-games        Store per-game records and moves for each seed
 
 All other options are passed to scripts/benchmark-gorisanson.js.
 
@@ -95,7 +99,13 @@ function runSeed(args, seed) {
     "--games", String(args.gamesPerSeed),
     ...args.passThrough
   ];
-  if (!childArgs.includes("--quiet")) childArgs.push("--quiet");
+  if (args.recordGames) {
+    for (let i = childArgs.length - 1; i >= 0; i -= 1) {
+      if (childArgs[i] === "--quiet") childArgs.splice(i, 1);
+    }
+  } else if (!childArgs.includes("--quiet")) {
+    childArgs.push("--quiet");
+  }
 
   const started = Date.now();
   const result = spawnSync(process.execPath, childArgs, {
@@ -116,12 +126,14 @@ function runSeed(args, seed) {
   const records = lines.map((line) => JSON.parse(line));
   const summaryRecord = records.find((record) => record.type === "summary");
   if (!summaryRecord) throw new Error("No summary line for seed " + seed);
-  return {
+  const seedRecord = {
     type: "seed",
     seed,
     durationMs,
     summary: summaryRecord.summary
   };
+  if (args.recordGames) seedRecord.games = records.filter((record) => record.type === "game");
+  return seedRecord;
 }
 
 function aggregate(seedRecords) {
@@ -189,6 +201,7 @@ function main() {
     type: "config",
     seeds: args.seeds,
     gamesPerSeed: args.gamesPerSeed,
+    recordGames: args.recordGames,
     passThrough: args.passThrough,
     startedAt: new Date().toISOString()
   };

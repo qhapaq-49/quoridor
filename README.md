@@ -32,7 +32,7 @@ gorisanson/quoridor-aiを/tmpに展開した状態なら、自動対戦も走ら
 node scripts/benchmark-gorisanson.js --games 4 --rollouts 2500 --our-strength strong --our-randomness 0
 ```
 
-複数seedをまとめて回す場合はバッチランナーを使います。JSONLで保存すると、あとで同じ条件を読み返せます。
+複数seedをまとめて回す場合はバッチランナーを使います。JSONLで保存すると、あとで同じ条件を読み返せます。負け棋譜を追う場合は `--record-games` を付けます。
 
 ```bash
 node scripts/batch-gorisanson.js --seeds 132,500,740 --games-per-seed 2 --rollouts 20000 --our-randomness 0 --our-time-limit 950 --our-max-depth 4 --quiet --out benchmarks/gori20k.jsonl

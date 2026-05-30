@@ -180,6 +180,7 @@ Change:
 - It runs `scripts/benchmark-gorisanson.js` over a seed list or seed range.
 - It prints per-seed JSON summaries and an aggregate summary.
 - It can append JSONL logs with `--out`, so exact benchmark conditions and results can be revisited later.
+- Added `--record-games` after the first batch showed rerun instability; this stores per-game records and moves for loss review.
 
 Decision: adopted. This is measurement infrastructure, not a playing-strength change.
 
