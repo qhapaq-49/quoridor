@@ -487,7 +487,15 @@
     }
 
     let quality = 0;
-    if (tempoLead && wallLead <= 1 && afterProgress < beforeProgress) quality -= 240;
+    if (tempoLead && wallLead <= 1) {
+      if (afterDistance > beforeDistance) quality -= 280;
+      if (afterProgress < beforeProgress) quality -= 240;
+    }
+    if (state.moveNumber <= 14 && tempoLead && wallLead <= 1 && state.wallsRemaining[target] > 0) {
+      const child = Engine.applyKnownLegalAction(state, action);
+      const trapDelta = forwardWallTrapDelta(child, player, target);
+      if (trapDelta >= 2) quality -= 80 + trapDelta * 130;
+    }
     if (strongWallLead) {
       quality += (afterCenter - beforeCenter) * 180;
       if (afterDistance > beforeDistance) quality -= 220;
@@ -518,6 +526,33 @@
     if (afterSelf < beforeSelf) return 180;
     if (afterSelf > beforeSelf) return -220;
     return 0;
+  }
+
+  function forwardWallTrapDelta(state, player, opponent) {
+    const pawn = state.pawns[player];
+    const goal = Engine.seatsForMode(state.mode)[player].goal;
+    const walls = [];
+    if (goal === "row0" || goal === "row8") {
+      const r = goal === "row0" ? pawn.r - 1 : pawn.r;
+      walls.push({ orientation: "h", r, c: pawn.c });
+      walls.push({ orientation: "h", r, c: pawn.c - 1 });
+    } else {
+      const c = goal === "col0" ? pawn.c - 1 : pawn.c;
+      walls.push({ orientation: "v", r: pawn.r, c });
+      walls.push({ orientation: "v", r: pawn.r - 1, c });
+    }
+
+    const before = safeDistance(shortestGoalDistance(state, player));
+    let worst = 0;
+    for (const wall of walls) {
+      if (!Engine.legalWall(state, wall.orientation, wall.r, wall.c, opponent)) continue;
+      let after = before;
+      withTemporaryWall(state, wall, () => {
+        after = safeDistance(shortestGoalDistance(state, player));
+      });
+      worst = Math.max(worst, after - before);
+    }
+    return worst;
   }
 
   function wallActionQualityFromPaths(state, wall, player, beforePaths, afterPaths) {

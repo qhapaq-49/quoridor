@@ -193,6 +193,41 @@ First larger baseline with the new runner:
 - Seeds 1000, 1005, and 1006 were only 1-1, so even 2.5k is not yet a solved baseline.
 
 
+### Early Forward-Wall Trap Penalty
+
+Observed pattern: gori 2,500 seed 1005 could bait our pawn into an early side step, then immediately place a front wall and force retreating moves. The shallow search sometimes chose that side step under the 950ms limit even though a longer trace preferred a wall.
+
+Change:
+
+- In early 2-player positions where we have a tempo lead and no meaningful wall lead, penalize pawn moves that increase our shortest distance.
+- Also penalize such early pawn moves when the opponent has an immediate legal front wall that would lengthen our route by at least two steps.
+
+Results:
+
+- Targeted seed 1005 trace after `O:e2 G:e8 O:e3 G:Hd3`: 950ms search changed the problematic `f3` choice to `Hf2`.
+- gori 2,500 seed 1005 record rerun: 1-1 after the prior recorded 0-2.
+- gori 2,500 seeds 1000..1007, 2 games each: 14-2, win rate 87.5%, average ours 492.3ms/move, average gori 761.8ms/move. The stable baseline on the same set was 13-3.
+- gori 20,000 seeds 132/500/740, 2 games each: 4-2, average ours 475.7ms/move, average gori 2995.4ms/move.
+
+Decision: adopted cautiously. It is a real improvement on the larger 2,500 set and does not regress the known 20,000 set, but the gain is still small and time-limit instability remains visible.
+
+### Replay Line Analysis Tool
+
+Added `scripts/replay-line.js` to replay a recorded benchmark game and print our candidate ranking at each selected turn without rerunning gorisanson. This exposed a seed 500 loss where a 120ms/depth-1 view preferred `g5`, while a deeper 600ms/depth-2 view preferred `e4`.
+
+Decision: adopted as analysis tooling. It makes loss review cheaper and helps separate evaluation errors from incomplete-search instability.
+
+### Rejected Race-Behind Trap Extension
+
+Idea: extend the front-wall trap penalty to cases where we are already behind in the pawn race, so the seed 500 `g5` jump would be rejected even at shallow depth.
+
+Result:
+
+- Local replay changed the shallow seed 500 choice from `g5` to `e4`.
+- But gori 20,000 seed 500 immediately regressed to 0-2.
+
+Decision: rejected. The local symptom was real, but the broader condition broke other play.
+
 ## Lessons So Far
 
 - Local tactical fixes often repair one visible loss and break a previous win. gori seeds 132/500/740 should stay in the minimum regression set.
