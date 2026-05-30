@@ -183,6 +183,15 @@ Change:
 
 Decision: adopted. This is measurement infrastructure, not a playing-strength change.
 
+First larger baseline with the new runner:
+
+- `benchmarks/gori2500_baseline_20260530.jsonl`
+- gori 2,500, seeds 1000..1007, 2 games per seed: 13-3, win rate 81.25%.
+- Draws: 0. Light wins: 7. Dark wins: 6.
+- Average ours: 455.5ms/move. Average gori: 478.7ms/move.
+- Seeds 1000, 1005, and 1006 were only 1-1, so even 2.5k is not yet a solved baseline.
+
+
 ## Lessons So Far
 
 - Local tactical fixes often repair one visible loss and break a previous win. gori seeds 132/500/740 should stay in the minimum regression set.
