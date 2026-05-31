@@ -59,7 +59,7 @@ node scripts/batch-gorisanson.js --seeds 132,500,740 --games-per-seed 2 --rollou
 
 ## GitHub Pages
 
-`master` へpushすると `.github/workflows/pages.yml` が静的ファイルだけをGitHub Pagesへデプロイします。公開対象は `index.html`、`styles.css`、`scripts/` です。
+公開用の静的ファイルは `gh-pages` ブランチに置きます。GitHub Pages の設定は `Deploy from a branch`、branch は `gh-pages`、folder は `/ (root)` を使います。
 
 ## 参照した先行事例
 
