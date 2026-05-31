@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Quoridor AI</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="play-area" aria-label="Quoridor board">
+        <div class="topbar">
+          <div>
+            <h1>Quoridor AI</h1>
+            <p id="statusLine">準備中</p>
+          </div>
+          <div class="top-actions">
+            <button id="newGameButton" type="button">新規対局</button>
+            <button id="undoButton" type="button">戻す</button>
+          </div>
+        </div>
+
+        <div class="board-wrap">
+          <canvas id="boardCanvas" width="742" height="742" aria-label="Quoridor board"></canvas>
+        </div>
+
+        <div class="tool-strip" role="toolbar" aria-label="Move tools">
+          <button class="tool-button is-active" type="button" data-tool="move">移動</button>
+          <button class="tool-button" type="button" data-tool="h">横壁</button>
+          <button class="tool-button" type="button" data-tool="v">縦壁</button>
+          <button id="hintButton" type="button">解析</button>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel-section">
+          <h2>対局</h2>
+          <div class="segmented" role="group" aria-label="Mode">
+            <button class="mode-button is-active" type="button" data-mode="2">2人</button>
+            <button class="mode-button" type="button" data-mode="4">4人</button>
+          </div>
+          <label class="field-row">
+            <span>強さ</span>
+            <select id="strengthSelect">
+              <option value="fast">軽量</option>
+              <option value="balanced" selected>標準</option>
+              <option value="strong">強め</option>
+            </select>
+          </label>
+          <label class="field-row">
+            <span>ランダム</span>
+            <input id="randomnessSlider" type="range" min="0" max="100" value="16">
+          </label>
+          <label class="check-row">
+            <input id="showHintsToggle" type="checkbox" checked>
+            <span>候補手を表示</span>
+          </label>
+        </section>
+
+        <section class="panel-section">
+          <h2>プレイヤー</h2>
+          <div id="playerList" class="player-list"></div>
+        </section>
+
+        <section class="panel-section">
+          <h2>候補手</h2>
+          <div id="analysisSummary" class="analysis-summary">解析待ち</div>
+          <ol id="candidateList" class="candidate-list"></ol>
+        </section>
+
+        <section class="panel-section compact">
+          <h2>研究メモ</h2>
+          <p>MCTS系の先行実装と同じく、壁候補を最短路周辺に絞り、最短路差・壁残数・即詰みを評価します。</p>
+        </section>
+      </aside>
+    </main>
+
+    <script src="scripts/engine.js"></script>
+    <script src="scripts/ai.js"></script>
+    <script src="scripts/app.js"></script>
+  </body>
+</html>
