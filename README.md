@@ -2,6 +2,8 @@
 
 GitHub Pages でそのまま動く、ビルド不要のコリドール実装です。
 
+公開URL: https://qhapaq-49.github.io/quoridor/
+
 ## 機能
 
 - 2人戦と4人戦
@@ -54,6 +56,10 @@ node scripts/batch-gorisanson.js --seeds 132,500,740 --games-per-seed 2 --rollou
 - 実験用MCTS: gori 1,000には勝てる局面がある一方、gori 2,500には不安定だったため現時点では不採用です。
 
 静的ファイルだけなので、`index.html` を開けば遊べます。ローカルサーバーで確認する場合は任意の静的サーバーを使ってください。
+
+## GitHub Pages
+
+`master` へpushすると `.github/workflows/pages.yml` が静的ファイルだけをGitHub Pagesへデプロイします。公開対象は `index.html`、`styles.css`、`scripts/` です。
 
 ## 参照した先行事例
 
